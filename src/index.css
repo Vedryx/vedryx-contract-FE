@@ -1,0 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Syncopate:wght@400;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  font-family: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #030712;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #030712;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.grid-overlay {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.09) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: linear-gradient(to bottom, black, transparent 86%);
+}
+
+.three-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  opacity: var(--scene-opacity, 0.72);
+  pointer-events: none;
+  transition: opacity 320ms ease;
+}
+
+.three-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-glass {
+  background: linear-gradient(145deg, rgba(2, 6, 23, 0.62), rgba(8, 47, 73, 0.24));
+}
+
+.content-shell {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 32px;
+  background:
+    linear-gradient(180deg, rgba(2, 6, 23, 0.94), rgba(15, 23, 42, 0.91)),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.12), transparent 34%);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.32);
+}
+
+.perspective-shell {
+  perspective: 1200px;
+  --orbit-x: 205px;
+  --orbit-y: 145px;
+}
+
+.scan-surface {
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(125, 211, 252, 0.08) 48%, transparent 100%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 7px);
+}
+
+.scan-surface::after {
+  content: '';
+  position: absolute;
+  inset: -35% 0 auto;
+  height: 42%;
+  background: linear-gradient(180deg, transparent, rgba(56, 189, 248, 0.22), transparent);
+  animation: scan-pass 5.6s ease-in-out infinite;
+}
+
+.orbit-chip {
+  left: calc(50% + (cos((var(--i) * 45deg)) * var(--orbit-x)));
+  top: calc(50% + (sin((var(--i) * 45deg)) * var(--orbit-y)));
+  transform: translate(-50%, -50%);
+}
+
+@supports not (left: calc(50% + (cos(45deg) * 1px))) {
+  .orbit-chip:nth-of-type(1) { left: 50%; top: 8%; }
+  .orbit-chip:nth-of-type(2) { left: 78%; top: 18%; }
+  .orbit-chip:nth-of-type(3) { left: 91%; top: 50%; }
+  .orbit-chip:nth-of-type(4) { left: 78%; top: 82%; }
+  .orbit-chip:nth-of-type(5) { left: 50%; top: 92%; }
+  .orbit-chip:nth-of-type(6) { left: 22%; top: 82%; }
+  .orbit-chip:nth-of-type(7) { left: 9%; top: 50%; }
+  .orbit-chip:nth-of-type(8) { left: 22%; top: 18%; }
+}
+
+::selection {
+  background: rgba(14, 165, 233, 0.35);
+  color: white;
+}
+
+@keyframes scan-pass {
+  0% {
+    transform: translateY(-20%);
+    opacity: 0;
+  }
+  22% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(360%);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .perspective-shell {
+    --orbit-x: 145px;
+    --orbit-y: 128px;
+  }
+
+  .three-stage {
+    opacity: var(--scene-opacity, 0.28);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .scan-surface::after {
+    display: none;
+  }
+}
