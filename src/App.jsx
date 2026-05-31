@@ -41,12 +41,6 @@ const requirementFields = [
 
 const matchChecks = ['Vetted match', 'Trial plan', 'Swap path']
 
-const metrics = [
-  ['2-week', 'trial window before long commitment'],
-  ['48h', 'replacement path when fit is off'],
-  ['14+', 'delivery stacks and roles covered by vetted talent'],
-]
-
 const roleCards = [
   ['Frontend', 'React, Next.js, UI systems, product surfaces'],
   ['Backend', 'Node, APIs, integrations, distributed services'],
@@ -68,7 +62,7 @@ const faqs = [
 ]
 
 const sceneStops = [0, 0.68, 0.9, 0.972, 1]
-const sceneTransitionMs = 1150
+const sceneTransitionMs = 1800
 
 function clamp(value, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value))
@@ -86,7 +80,10 @@ function App() {
   const snapTimerRef = useRef(0)
   const isSnappingRef = useRef(false)
   const touchStartYRef = useRef(0)
+  const wheelIntentRef = useRef(0)
+  const wheelIntentTimerRef = useRef(0)
   const [progress, setProgress] = useState(0)
+  const [activeScene, setActiveScene] = useState(0)
   const [cursor, setCursor] = useState({ x: 0, y: 0 })
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false })
 
@@ -120,7 +117,9 @@ function App() {
       setProgress(nextProgress)
 
       if (!isSnappingRef.current) {
-        sceneRef.current = nearestSceneIndex(nextProgress)
+        const nearestScene = nearestSceneIndex(nextProgress)
+        sceneRef.current = nearestScene
+        setActiveScene(nearestScene)
       }
 
       frame = 0
@@ -151,12 +150,11 @@ function App() {
       clearTimeout(snapTimerRef.current)
       isSnappingRef.current = true
       sceneRef.current = scene
+      setActiveScene(-1)
 
       function step(now) {
         const elapsed = clamp((now - startedAt) / sceneTransitionMs)
-        const eased = elapsed < 0.5
-          ? 4 * elapsed * elapsed * elapsed
-          : 1 - ((-2 * elapsed + 2) ** 3) / 2
+        const eased = 0.5 - Math.cos(elapsed * Math.PI) / 2
 
         window.scrollTo({ top: start + distance * eased, behavior: 'instant' })
 
@@ -167,6 +165,7 @@ function App() {
 
         window.scrollTo({ top: target, behavior: 'instant' })
         isSnappingRef.current = false
+        setActiveScene(scene)
         update()
       }
 
@@ -195,8 +194,36 @@ function App() {
     }
 
     function onWheel(event) {
-      if (Math.abs(event.deltaY) < 8) return
-      snapByDirection(event.deltaY > 0 ? 1 : -1, event)
+      if (!isInsideStory()) return
+
+      const normalizedDelta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1)
+      if (Math.abs(normalizedDelta) < 0.2) return
+
+      const direction = normalizedDelta > 0 ? 1 : -1
+      const currentScene = sceneRef.current
+      const atFirstScene = currentScene === 0 && direction < 0
+      const atLastScene = currentScene === sceneStops.length - 1 && direction > 0
+
+      if (atFirstScene || atLastScene) return
+
+      event.preventDefault()
+
+      if (isSnappingRef.current) return
+
+      const currentIntent = wheelIntentRef.current
+      const isSameDirection = currentIntent === 0 || Math.sign(currentIntent) === direction
+      wheelIntentRef.current = isSameDirection ? currentIntent + normalizedDelta : normalizedDelta
+
+      clearTimeout(wheelIntentTimerRef.current)
+      wheelIntentTimerRef.current = window.setTimeout(() => {
+        wheelIntentRef.current = 0
+      }, 240)
+
+      if (Math.abs(wheelIntentRef.current) < 12) return
+
+      wheelIntentRef.current = 0
+      clearTimeout(wheelIntentTimerRef.current)
+      animateToScene(currentScene + direction)
     }
 
     function onKeyDown(event) {
@@ -218,7 +245,7 @@ function App() {
     function onTouchEnd(event) {
       const endY = event.changedTouches[0]?.clientY ?? touchStartYRef.current
       const delta = touchStartYRef.current - endY
-      if (Math.abs(delta) < 36) return
+      if (Math.abs(delta) < 18) return
       snapByDirection(delta > 0 ? 1 : -1, event)
     }
 
@@ -246,6 +273,7 @@ function App() {
       cancelAnimationFrame(frame)
       cancelAnimationFrame(snapFrameRef.current)
       clearTimeout(snapTimerRef.current)
+      clearTimeout(wheelIntentTimerRef.current)
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('scroll', scheduleSettledSnap)
       window.removeEventListener('wheel', onWheel)
@@ -261,6 +289,8 @@ function App() {
     const keyhole = segment(progress, 0.2, 0.34)
     const door = segment(progress, 0.32, 0.48)
     const trial = segment(progress, 0.52, 0.7)
+    const handoff = segment(trial, 0.74, 1)
+    const developerSettle = segment(trial, 0.58, 0.88)
     const loop = segment(progress, 0.8, 0.89)
     const orbitCollapse = segment(progress, 0.99, 1)
     const final = segment(progress, 0.992, 1)
@@ -283,7 +313,8 @@ function App() {
       '--proof-0': segment(trial, 0.42, 0.64),
       '--proof-1': segment(trial, 0.56, 0.78),
       '--proof-2': segment(trial, 0.7, 0.92),
-      '--handoff': segment(trial, 0.74, 1),
+      '--handoff': handoff,
+      '--developer-tilt': `${trial * (1 - developerSettle) * 28}deg`,
       '--loop-enter': segment(progress, 0.78, 0.84),
       '--loop-p': loop,
       '--loop-exit': segment(progress, 0.89, 0.93),
@@ -319,7 +350,7 @@ function App() {
   }
 
   return (
-    <main className="site-shell" style={vars}>
+    <main className="site-shell" data-active-scene={activeScene} style={vars}>
       <header className="story-nav">
         <a className="brand-mark" href="#top">Vedryx</a>
         <nav aria-label="Primary navigation">
@@ -505,15 +536,6 @@ function App() {
 
       <div className="scroll-length" aria-hidden="true" />
       </div>
-
-      <section className="proof-strip" aria-label="Vedryx proof points">
-        {metrics.map(([value, label]) => (
-          <div className="metric" key={value}>
-            <strong>{value}</strong>
-            <span>{label}</span>
-          </div>
-        ))}
-      </section>
 
       <section className="site-section roles-section" id="roles">
         <div className="section-heading">
