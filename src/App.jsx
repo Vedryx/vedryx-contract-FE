@@ -1,13 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-const trialSignals = [
-  ['Resume maze', 'Polished profiles still hide delivery risk.', 'risk'],
-  ['Permanent bet', 'Long commitments start before real proof.', 'risk'],
-  ['Late mismatch', 'Fit problems surface after momentum is lost.', 'risk'],
-  ['Live trial', 'A vetted developer ships in your real sprint.', 'proof'],
-  ['Fit gate', 'Output, communication, and culture are checked early.', 'proof'],
-  ['Swap path', 'If fit is wrong, replacement is built into the model.', 'proof'],
-]
+const hiringComparison = {
+  without: {
+    title: 'Without Vedryx',
+    label: 'Traditional hiring',
+    tone: 'risk',
+    rows: [
+      ['Screen resumes', 'Sift through hundreds by hand'],
+      ['Interview rounds', 'Weeks of rounds and guessing'],
+      ['Make a permanent hire', 'Committed before any real output'],
+      ['Wrong fit, found late', 'Months in, and too late'],
+      ['Severance and restart', 'Sunk cost, roadmap stalls'],
+    ],
+    chips: ['3-6 months lost', 'Severance + re-hire cost'],
+  },
+  with: {
+    title: 'With Vedryx',
+    label: 'Risk-free capacity',
+    tone: 'proof',
+    rows: [
+      ['Skip resume screening', 'Every engineer is already pre-vetted'],
+      ['Get matched in 72h', 'Ready-to-deploy engineers'],
+      ['Developer starts', 'Shipping from day one'],
+      ['Not a fit?', 'Swap and continue without restart'],
+      ['Zero severance, continue', 'Momentum never breaks'],
+    ],
+    chips: ['Days to start', 'Zero severance'],
+  },
+}
 
 const flowSteps = [
   ['Developer starts', 'A vetted engineer joins live project work.'],
@@ -70,6 +90,35 @@ function clamp(value, min = 0, max = 1) {
 
 function segment(progress, start, end) {
   return clamp((progress - start) / (end - start))
+}
+
+function ComparisonPanel({ comparison }) {
+  return (
+    <article className={`comparison-panel ${comparison.tone}`}>
+      <div className="comparison-panel-head">
+        <h3>{comparison.title}</h3>
+        <span>{comparison.label}</span>
+      </div>
+
+      <div className="comparison-rows">
+        {comparison.rows.map(([title, copy], index) => (
+          <div className="comparison-step" key={title}>
+            <span>{String(index + 1).padStart(2, '0')}</span>
+            <div>
+              <strong>{title}</strong>
+              <p>{copy}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="comparison-chips">
+        {comparison.chips.map((chip) => (
+          <span key={chip}>{chip}</span>
+        ))}
+      </div>
+    </article>
+  )
 }
 
 function App() {
@@ -289,8 +338,6 @@ function App() {
     const keyhole = segment(progress, 0.2, 0.34)
     const door = segment(progress, 0.32, 0.48)
     const trial = segment(progress, 0.52, 0.7)
-    const handoff = segment(trial, 0.74, 1)
-    const developerSettle = segment(trial, 0.58, 0.88)
     const loop = segment(progress, 0.8, 0.89)
     const orbitCollapse = segment(progress, 0.99, 1)
     const final = segment(progress, 0.992, 1)
@@ -307,14 +354,6 @@ function App() {
       '--trial-opacity': segment(progress, 0.5, 0.56) * (1 - segment(progress, 0.72, 0.8)),
       '--trial-exit': segment(progress, 0.72, 0.8),
       '--trial-p': trial,
-      '--risk-0': segment(trial, 0.02, 0.22),
-      '--risk-1': segment(trial, 0.16, 0.38),
-      '--risk-2': segment(trial, 0.3, 0.52),
-      '--proof-0': segment(trial, 0.42, 0.64),
-      '--proof-1': segment(trial, 0.56, 0.78),
-      '--proof-2': segment(trial, 0.7, 0.92),
-      '--handoff': handoff,
-      '--developer-tilt': `${trial * (1 - developerSettle) * 28}deg`,
       '--loop-enter': segment(progress, 0.78, 0.84),
       '--loop-p': loop,
       '--loop-exit': segment(progress, 0.89, 0.93),
@@ -388,48 +427,15 @@ function App() {
 
         <div className="trial-scene">
           <div className="trial-copy">
-            <span>Scene 02</span>
-            <h2>Turn hiring risk into trial evidence.</h2>
-            <p>The old path asks you to trust resumes. Vedryx moves risk through a live trial where proof appears before commitment.</p>
+            <span>With vs without Vedryx</span>
+            <h2>One requirement. Two very different outcomes.</h2>
+            <p>Same role, same start date, but the journey and the risk look nothing alike.</p>
           </div>
 
-          <div className="trial-system" aria-label="Vedryx trial model">
-            <div className="risk-bank">
-              {trialSignals.slice(0, 3).map(([title, copy, type], index) => (
-                <article className={`signal-card ${type} signal-${index}`} key={title}>
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                  <h3>{title}</h3>
-                  <p>{copy}</p>
-                </article>
-              ))}
-            </div>
-
-            <div className="trial-core">
-              <div className="core-rings" />
-              <div className="core-beam" />
-              <div className="developer-node">
-                <b>Dev</b>
-                <small>starts in sprint</small>
-              </div>
-              <div className="core-label">
-                <span>Vedryx trial</span>
-                <strong>Proof before commitment</strong>
-              </div>
-            </div>
-
-            <div className="proof-bank">
-              {trialSignals.slice(3).map(([title, copy, type], index) => (
-                <article className={`signal-card ${type} proof-${index}`} key={title}>
-                  <span>{String(index + 4).padStart(2, '0')}</span>
-                  <h3>{title}</h3>
-                  <p>{copy}</p>
-                </article>
-              ))}
-            </div>
-
-            <div className="handoff-path">
-              <span>feeds the fit decision</span>
-            </div>
+          <div className="trial-system comparison-system" aria-label="With versus without Vedryx comparison">
+            <ComparisonPanel comparison={hiringComparison.without} />
+            <div className="comparison-vs">vs</div>
+            <ComparisonPanel comparison={hiringComparison.with} />
           </div>
         </div>
 
