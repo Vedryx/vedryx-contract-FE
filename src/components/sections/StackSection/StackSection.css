@@ -1,0 +1,10 @@
+.universe { height: 620px; position: relative; margin-top: -8px; }
+.stack-title { margin: 20px auto 0; max-width: 18ch; }
+.stack-copy { margin: 16px auto 0; }
+.universe canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+.universe::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: 420px; height: 420px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(109,139,255,0.16), transparent 65%); pointer-events: none;
+}
+@media (max-width: 760px){ .universe { height: 520px; } }

@@ -1,0 +1,65 @@
+.compare-section { padding-top: clamp(54px, 7vh, 86px); padding-bottom: clamp(66px, 8vh, 104px); }
+.compact-title { margin-top: 14px; max-width: 18ch; }
+.compare-lead { margin-top: 12px; }
+.compare { display: grid; grid-template-columns: 1fr 54px 1fr; gap: 0; margin-top: 24px; align-items: stretch; }
+.compare-col {
+  border: 1px solid var(--border); border-radius: var(--r); padding: 20px 22px;
+  display: flex; flex-direction: column; background: var(--panel); position: relative;
+}
+.compare-col.without { background: linear-gradient(180deg, rgba(255,93,108,0.05), rgba(255,93,108,0.005)); border-color: rgba(255,93,108,0.22); }
+.compare-col.with { background: linear-gradient(180deg, rgba(109,139,255,0.09), rgba(109,139,255,0.015)); border-color: rgba(109,139,255,0.42); box-shadow: 0 30px 80px rgba(109,139,255,0.14); }
+body.no-highlight .compare-col.with { background: var(--panel); border-color: var(--border); box-shadow: none; }
+.cc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 14px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.cc-tag { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+.compare-col.without .cc-tag { color: #ff8a95; }
+.compare-col.with .cc-tag { color: var(--accent-ink); }
+.cc-sub { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+.csteps { list-style: none; display: flex; flex-direction: column; flex: 1; }
+.cstep { display: flex; gap: 13px; align-items: flex-start; padding: 8px 0; border-top: 1px dashed var(--border); min-height: 42px; }
+.cstep:first-child { border-top: none; }
+.cstep > div { flex: 1; min-width: 0; }
+.cnum { font-family: var(--font-display); font-size: 12px; font-weight: 600; color: var(--faint); width: 22px; flex: none; padding-top: 2px; }
+.ct { font-family: var(--font-display); font-size: 15.5px; font-weight: 500; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.cs { font-size: 13px; color: var(--muted); margin-top: 1px; }
+.compare-col.without .cstep.bad .ct, .compare-col.without .cstep.bad .cnum { color: var(--danger); }
+.compare-col.with .cstep.good .ct { color: #9fe9c6; }
+.compare-col.with .cstep.loop .ct { color: var(--accent-2); }
+.loop-pill { font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--accent-2); border: 1px dashed rgba(70,217,255,0.5); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.cc-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.cchip { font-size: 12.5px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 7px; }
+.cchip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+.cchip.bad { color: #ff8a95; border-color: rgba(255,93,108,0.3); background: rgba(255,93,108,0.06); }
+.cchip.bad::before { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.cchip.good { color: #7ee0b5; border-color: rgba(126,224,181,0.3); background: rgba(126,224,181,0.06); }
+.cchip.good::before { background: #7ee0b5; box-shadow: 0 0 8px #7ee0b5; }
+.vs { display: flex; align-items: center; justify-content: center; }
+.vs span {
+  font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: 0.08em; color: var(--muted);
+  width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--border-2); background: var(--bg-2); box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 3;
+}
+@media (max-width: 900px){
+  .compare { grid-template-columns: 1fr; }
+  .vs { padding: 8px 0; }
+}
+@media (max-width: 560px){
+  .compare-section {
+    padding-top: 58px;
+    padding-bottom: 64px;
+  }
+
+  .compact-title { margin-top: 12px; }
+  .compare { margin-top: 18px; }
+  .compare-col { padding: 17px 18px; }
+  .cc-head { gap: 8px; padding-bottom: 12px; }
+  .cc-sub { font-size: 10px; letter-spacing: 0.13em; }
+  .cstep { gap: 11px; padding: 7px 0; min-height: 38px; }
+  .ct { font-size: 15px; }
+  .vs { padding: 10px 0; }
+  .vs span {
+    width: 42px;
+    height: 42px;
+    font-size: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  }
+}

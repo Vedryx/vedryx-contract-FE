@@ -1,0 +1,59 @@
+.hero { min-height: 100svh; display: flex; align-items: center; padding-top: 90px; overflow: hidden; }
+#scene { position: absolute; inset: 0; z-index: 1; }
+.hero-veil {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(920px 680px at 24% 48%, rgba(5,6,12,0.82), rgba(5,6,12,0.58) 34%, transparent 68%),
+    radial-gradient(120% 80% at 50% 120%, rgba(5,6,12,0.9), transparent 55%),
+    linear-gradient(180deg, rgba(5,6,12,0.55) 0%, transparent 28%, transparent 60%, rgba(5,6,12,0.85) 100%);
+}
+.hero .wrap { display: grid; grid-template-columns: 1fr; gap: 30px; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 10px; align-self: flex-start;
+  padding: 8px 14px 8px 12px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--border-2);
+  font-size: 13px; color: var(--muted); backdrop-filter: blur(8px);
+}
+.hero-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 12px var(--accent-2); animation: pulse 2.4s infinite; }
+@keyframes pulse { 0%,100%{ opacity:1; transform: scale(1);} 50%{ opacity:.4; transform: scale(.7);} }
+.hero h1 { max-width: 18ch; }
+.hero h1 .ln { display: block; overflow: visible; padding-bottom: 0.02em; }
+.hero h1 .ln > span { display: block; }
+body.anim .hero h1 .ln > span { opacity: 0; transform: translateY(34px); animation: heroLine .95s cubic-bezier(.2,.7,.2,1) forwards; }
+body.anim .hero h1 .ln:nth-child(1) > span { animation-delay: .25s; }
+body.anim .hero h1 .ln:nth-child(2) > span { animation-delay: .35s; }
+@keyframes heroLine { to { opacity: 1; transform: none; } }
+body.anim .hero-badge, body.anim .hero-sub, body.anim .hero-actions, body.anim .hero-proofline { opacity: 0; transform: translateY(20px); animation: fadeUp .9s cubic-bezier(.2,.7,.2,1) forwards; }
+body.anim .hero-badge { animation-delay: .55s; }
+body.anim .hero-sub { animation-delay: .68s; }
+body.anim .hero-actions { animation-delay: .8s; }
+body.anim .hero-proofline { animation-delay: .9s; }
+@keyframes fadeUp { to { opacity: 1; transform: none; } }
+body.hero-done .hero-badge, body.hero-done .hero-sub, body.hero-done .hero-proofline,
+body.hero-done .hero-actions { opacity: 1 !important; transform: none !important; }
+body.hero-done .hero h1 .ln > span { transform: none !important; opacity: 1 !important; }
+.hero-sub { max-width: 58ch; margin-top: 4px; }
+.hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+.hero-proofline {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  margin-top: -6px; color: #c9d3ff; font-size: 13px; font-weight: 600;
+}
+.hero-proofline span {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid rgba(109,139,255,0.2); border-radius: 999px;
+  background: rgba(5,6,12,0.36); padding: 6px 10px; backdrop-filter: blur(8px);
+}
+.hero-proofline span::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-2); box-shadow: 0 0 10px rgba(70,217,255,0.58);
+}
+@media (max-width: 560px) {
+  .hero-veil {
+    background:
+      linear-gradient(90deg, rgba(5,6,12,0.9), rgba(5,6,12,0.64) 62%, rgba(5,6,12,0.28)),
+      radial-gradient(120% 80% at 50% 120%, rgba(5,6,12,0.9), transparent 55%),
+      linear-gradient(180deg, rgba(5,6,12,0.62) 0%, transparent 32%, rgba(5,6,12,0.88) 100%);
+  }
+  .hero-proofline { display: grid; gap: 8px; align-items: start; }
+  .hero-proofline span { width: max-content; max-width: 100%; }
+}
