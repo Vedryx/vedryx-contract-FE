@@ -1,0 +1,10 @@
+.closing { text-align: center; overflow: hidden; }
+.closing .display { margin: 0 auto; max-width: 18ch; }
+.closing-title { margin-top: 24px; }
+.closing .lead { margin: 24px auto 36px; text-align: center; }
+.closing-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.closing::before {
+  content:''; position:absolute; left:50%; top:40%; transform: translate(-50%,-50%);
+  width: 760px; height: 760px; max-width: 110vw;
+  background: radial-gradient(circle, rgba(109,139,255,0.16), transparent 62%); pointer-events: none; z-index: 0;
+}

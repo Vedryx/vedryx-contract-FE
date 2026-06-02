@@ -1,0 +1,9 @@
+.brand { display: flex; align-items: center; gap: 11px; font-family: var(--font-display); font-weight: 600; font-size: 20px; letter-spacing: -0.02em; }
+.brand .mark {
+  width: 26px; height: 26px; position: relative; display: grid; place-items: center;
+}
+.brand .mark svg { width: 26px; height: 26px; filter: drop-shadow(0 0 8px rgba(109,139,255,0.6)); }
+
+@media (max-width: 380px){
+  .brand { font-size: 18px; }
+}
