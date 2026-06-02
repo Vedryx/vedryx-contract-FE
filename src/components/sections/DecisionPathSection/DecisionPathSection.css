@@ -164,6 +164,20 @@
   margin-top: 22px;
 }
 
+.decision-form .btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+
+.form-trap {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 .form-success {
   margin-top: 16px;
   border: 1px solid rgba(126,224,181,0.3);
@@ -172,6 +186,55 @@
   color: #9fe9c6;
   padding: 11px 13px;
   font-size: 14px;
+}
+
+.form-error {
+  margin-top: 16px;
+  border: 1px solid rgba(255,93,108,0.34);
+  border-radius: 10px;
+  background: rgba(255,93,108,0.07);
+  color: #ff9aa4;
+  padding: 11px 13px;
+  font-size: 14px;
+}
+
+.callback-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5,6,12,0.72);
+  backdrop-filter: blur(14px);
+}
+
+.callback-modal-panel {
+  width: min(100%, 460px);
+  border: 1px solid rgba(109,139,255,0.34);
+  border-radius: var(--r);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)),
+    radial-gradient(520px 240px at 20% 0%, rgba(109,139,255,0.16), transparent 70%),
+    var(--bg-2);
+  box-shadow: 0 34px 120px rgba(0,0,0,0.46), inset 0 1px 0 rgba(255,255,255,0.08);
+  padding: 30px;
+}
+
+.callback-modal-panel h3 {
+  margin-top: 16px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.callback-modal-panel p {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.callback-modal-panel .btn {
+  margin-top: 24px;
 }
 
 .engagement-assurances {

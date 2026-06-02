@@ -4,10 +4,38 @@ import './DecisionPathSection.css'
 
 export function DecisionPathSection() {
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    setSubmitted(true)
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const payload = Object.fromEntries(formData.entries())
+
+    setError('')
+    setSubmitting(true)
+
+    try {
+      const response = await fetch('/api/callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.ok) {
+        throw new Error(result.message || 'Unable to submit the request right now.')
+      }
+
+      form.reset()
+      setSubmitted(true)
+    } catch (submitError) {
+      setError(submitError.message)
+      setSubmitted(false)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -43,6 +71,10 @@ export function DecisionPathSection() {
             </div>
 
             <div className="form-grid">
+              <label className="form-trap" aria-hidden="true">
+                <span>Website</span>
+                <input type="text" name="website" tabIndex="-1" autoComplete="off" />
+              </label>
               <label>
                 <span>Work email</span>
                 <input type="email" name="email" autoComplete="email" required />
@@ -70,7 +102,13 @@ export function DecisionPathSection() {
               </label>
             </div>
 
-            <button type="submit" className="btn btn-primary">Request Callback <span className="arrow">→</span></button>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? 'Submitting...' : 'Request Callback'} <span className="arrow">→</span>
+            </button>
+
+            {error && (
+              <p className="form-error" role="alert">{error}</p>
+            )}
 
             {submitted && (
               <p className="form-success" role="status">Requirement received. Vedryx will contact you by phone or email.</p>
@@ -84,6 +122,17 @@ export function DecisionPathSection() {
           ))}
         </div>
       </div>
+
+      {submitted && (
+        <div className="callback-modal" role="dialog" aria-modal="true" aria-labelledby="callback-modal-title">
+          <div className="callback-modal-panel">
+            <span className="eyebrow">Request received</span>
+            <h3 id="callback-modal-title">Vedryx will contact you shortly.</h3>
+            <p>We have received your requirement. Our team will review it and contact you by phone or email.</p>
+            <button type="button" className="btn btn-primary" onClick={() => setSubmitted(false)}>Close</button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

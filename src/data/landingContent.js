@@ -79,6 +79,7 @@ export const roleOptions = [
   'Cloud or DevOps engineer',
   'Mobile developer',
   'QA automation engineer',
+  'Other',
 ]
 
 export const engagementAssurances = [
