@@ -50,9 +50,9 @@ export function TechUniverse() {
     core.add(coreA, coreB, coreGlow)
 
     const rings = [
-      { r: 13, tilt: 0, dir: 1, speed: 0.085, items: ['React', 'Node.js', 'Python', 'AWS', 'Go'] },
-      { r: 20, tilt: 0.5, dir: -1, speed: 0.06, items: ['Spring Boot', 'Next.js', 'Kubernetes', 'Azure', 'Java', 'Docker'] },
-      { r: 27, tilt: -0.42, dir: 1, speed: 0.044, items: ['AI / ML', 'Data Eng', 'Flutter', 'Android', 'iOS', 'Terraform', 'PostgreSQL'] },
+      { r: 13, tilt: 0, dir: 1, speed: 0.085, items: ['Java', 'Spring Boot', 'JavaScript', 'React'] },
+      { r: 20, tilt: 0.5, dir: -1, speed: 0.06, items: ['Node.js', 'Python', 'Flask', 'MongoDB'] },
+      { r: 27, tilt: -0.42, dir: 1, speed: 0.044, items: ['PostgreSQL', 'Redis', 'Kafka', 'ELK Stack'] },
     ].map((ring) => {
       const group = new THREE.Group()
       group.rotation.x = ring.tilt
