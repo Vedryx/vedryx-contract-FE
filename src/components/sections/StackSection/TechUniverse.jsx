@@ -50,9 +50,9 @@ export function TechUniverse() {
     core.add(coreA, coreB, coreGlow)
 
     const rings = [
-      { r: 13, tilt: 0, dir: 1, speed: 0.085, items: ['Java', 'Spring Boot', 'JavaScript', 'React'] },
-      { r: 20, tilt: 0.5, dir: -1, speed: 0.06, items: ['Node.js', 'Python', 'Flask', 'MongoDB'] },
-      { r: 27, tilt: -0.42, dir: 1, speed: 0.044, items: ['PostgreSQL', 'Redis', 'Kafka', 'ELK Stack'] },
+      { r: 13, tilt: 0, dir: 1, speed: 0.085, itemScale: 1, items: ['Java', 'Spring Boot', 'JavaScript', 'React', 'Node.js'] },
+      { r: 20, tilt: 0.5, dir: -1, speed: 0.06, itemScale: 1, items: ['Python', 'Flask', 'MongoDB', 'PostgreSQL', 'Redis', 'Kafka'] },
+      { r: 27, tilt: -0.42, dir: 1, speed: 0.044, itemScale: 0.64, items: ['ELK Stack', 'Data Eng', 'Backend', 'Frontend', 'Full-stack', 'DevOps', 'QA'] },
     ].map((ring) => {
       const group = new THREE.Group()
       group.rotation.x = ring.tilt
@@ -80,6 +80,7 @@ export function TechUniverse() {
         const spokeEndRadius = ring.r * 0.54
         const sprite = makeLabelSprite(label)
         sprite.position.set(x, 0, z)
+        sprite.scale.multiplyScalar(ring.itemScale)
         sprite.userData.baseScale = sprite.scale.clone()
         const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: 0x9db4ff, transparent: true, blending: THREE.AdditiveBlending, opacity: 0.9, depthWrite: false }))
         dot.scale.set(1.4, 1.4, 1)
