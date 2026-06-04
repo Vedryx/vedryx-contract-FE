@@ -3,49 +3,50 @@ export const comparison = {
     title: 'Without Vedryx',
     subtitle: 'Traditional hiring',
     tone: 'without',
-    chips: ['3-6 months lost', 'Severance + re-hire cost'],
+    chips: ['3-6 months lost', 'PIP + severance risk'],
     steps: [
-      ['Screen resumes', 'Sift through hundreds by hand'],
-      ['Interview rounds', 'Weeks of rounds and guessing'],
+      ['Screen resumes', 'Sift through hundreds before anyone ships'],
+      ['Arrange interviews', 'Calls, calendars, panels, and guesswork'],
       ['Make a permanent hire', 'Committed before any real output'],
-      ['Wrong fit, found late', 'Months in - and too late', 'bad'],
-      ['Severance & restart', 'Sunk cost, the roadmap stalls', 'bad'],
+      ['Underperformance shows late', 'Now you manage PIP, payroll, and delay', 'bad'],
+      ['Severance & restart', 'You pay to exit, then hire again', 'bad'],
     ],
   },
   with: {
     title: 'With Vedryx',
     subtitle: 'Risk-free capacity',
     tone: 'with',
-    chips: ['Days to start', 'Zero severance'],
+    chips: ['Unlimited replacement', 'No PIP or severance'],
     steps: [
-      ['Skip resume screening', 'Every engineer is already pre-vetted', 'good'],
-      ['Get matched in 72h', 'Ready-to-deploy engineers'],
-      ['Developer starts', 'Shipping from day one'],
-      ['Not a fit?', 'Replaced instantly - no questions', 'loop'],
-      ['Zero severance, continue', 'Momentum never breaks', 'good'],
+      ['Skip resume screening', 'Vedryx brings pre-vetted developers', 'good'],
+      ['Get matched in 72h', 'Interview overhead drops to fit review'],
+      ['Developer starts', 'Judge performance through real work'],
+      ['Not performing?', 'Vedryx replaces them at no extra cost', 'loop'],
+      ['Repeat until right', 'Swap as many times as needed', 'good'],
     ],
   },
 }
 
 export const guarantees = [
-  'No hiring costs',
+  'No resume screening',
+  'No interview scheduling',
+  'No PIP liability',
   'No severance costs',
-  'No recruitment overhead',
-  'No long hiring cycles',
-  'No hidden clauses',
+  'Unlimited replacement',
 ]
 
 export const noRiskItems = [
-  'severance',
-  'recruitment cycles',
-  'wasted months',
-  'hiring risk',
+  'resume screening',
+  'interview scheduling',
+  'PIP exposure',
+  'severance pay',
+  'replacement limits',
 ]
 
 export const trustStats = [
   ['72h', 'to first shortlist', 'Fast enough for roadmap pressure, structured enough for HR review.'],
-  ['0', 'severance liability', 'Developers stay employed by Vedryx during evaluation.'],
-  ['1', 'replacement path included', 'If fit breaks, the engagement does not restart from zero.'],
+  ['0', 'PIP or severance liability', 'Developers stay employed by Vedryx, so underperformance is not your employment burden.'],
+  ['Any', 'replacements included', 'If the developer does not perform, Vedryx swaps again until the right fit is working.'],
 ]
 
 export const vettingSignals = [
@@ -58,10 +59,10 @@ export const vettingSignals = [
 export const whyCards = [
   ['shield', 'Risk-Free Engagement', "Decide after you've seen real output."],
   ['bolt', 'Fast Team Scaling', 'Add senior engineers in days, not quarters.'],
-  ['replace', 'Replacement Guarantee', 'Not a fit? We swap them, instantly.'],
-  ['check', 'Pre-Vetted Engineers', 'Top-tier talent, rigorously screened.'],
+  ['replace', 'Unlimited Replacement', 'If performance misses, Vedryx swaps at no extra cost.'],
+  ['check', 'No Screening Grind', 'Skip resume piles, cold calls, and interview scheduling.'],
   ['globe', 'Wide Technology Coverage', 'Backend to AI, cloud to mobile.'],
-  ['contract', 'Flexible Contracts', 'Scale up, scale down, no penalties.'],
+  ['contract', 'No PIP Or Severance', 'The developer stays on Vedryx payroll, not yours.'],
 ]
 
 export const decisionSteps = [
@@ -88,6 +89,7 @@ export const roleOptions = [
 
 export const engagementAssurances = [
   'Developer stays on Vedryx payroll',
+  'Unlimited replacement at no extra cost',
   'Contract is between Vedryx and your company',
-  'No online developer transaction on this site',
+  'No PIP or severance liability',
 ]

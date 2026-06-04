@@ -7,20 +7,20 @@ export function HeroSection() {
       <HeroScene />
       <div className="hero-veil" />
       <div className="wrap">
-        <div className="hero-badge"><span className="dot" /> Developers stay employed by Vedryx - not your risk</div>
-        <h1 className="display" aria-label="Evaluate vetted engineers before committing.">
-          <span className="ln"><span>Evaluate vetted</span></span>
-          <span className="ln"><span>engineers before committing.</span></span>
+        <div className="hero-badge"><span className="dot" /> No PIP, no severance, unlimited replacement</div>
+        <h1 className="display" aria-label="Try vetted developers. Replace until they perform.">
+          <span className="ln"><span>Try vetted developers.</span></span>
+          <span className="ln"><span>Replace until they perform.</span></span>
         </h1>
-        <p className="lead hero-sub">Give product teams qualified engineering capacity while HR keeps employment risk reversible. Validate delivery, communication, and team fit in real work before making a long-term commitment.</p>
+        <p className="lead hero-sub">Vedryx removes the hiring drag of resume screening, calls, and interview scheduling. If a developer does not perform, Vedryx replaces them at no extra cost, as many times as needed, while you avoid PIP and severance liability.</p>
         <div className="hero-actions">
           <a href="#submit" className="btn btn-primary">Request Callback <span className="arrow">→</span></a>
           <a href="#submit" className="btn btn-ghost">Contact Vedryx</a>
         </div>
         <div className="hero-proofline" aria-label="Vedryx engagement safeguards">
           <span>First shortlist in 72 hours</span>
-          <span>Replacement included</span>
-          <span>No severance liability</span>
+          <span>Unlimited replacement</span>
+          <span>No PIP or severance liability</span>
         </div>
       </div>
     </header>

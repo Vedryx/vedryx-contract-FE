@@ -29,7 +29,7 @@ export function ComparisonScene() {
       <div className="wrap">
         <span className="eyebrow" data-reveal>With vs without Vedryx</span>
         <h2 className="section-title utility-title compact-title" data-reveal data-delay="0.05">One requirement. Two very different outcomes.</h2>
-        <p className="lead compare-lead" data-reveal data-delay="0.1">Same role, same start date - but the journey, and the risk, look nothing alike.</p>
+        <p className="lead compare-lead" data-reveal data-delay="0.1">Same requirement, very different risk: traditional hiring makes you screen, interview, manage underperformance, and pay to exit.</p>
         <div className="compare" data-reveal data-delay="0.15">
           <ComparisonColumn item={comparison.without} />
           <div className="vs"><span>VS</span></div>

@@ -8,7 +8,7 @@ export function TrustLayer() {
         <div className="trust-panel" data-reveal>
           <div className="trust-intro">
             <span className="eyebrow">Built for product-company hiring teams</span>
-            <p>Evaluate delivery, communication, and team fit before adding employment risk. Vedryx keeps the developer relationship operationally reversible.</p>
+            <p>Evaluate delivery, communication, and team fit without becoming liable for PIP, severance, or another hiring cycle. Vedryx keeps the developer relationship operationally reversible.</p>
           </div>
 
           <div className="trust-stats" aria-label="Vedryx engagement proof points">

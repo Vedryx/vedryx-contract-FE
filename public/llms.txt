@@ -1,0 +1,16 @@
+# Vedryx
+
+Vedryx helps product and HR teams skip resume screening, calls, and interview scheduling by evaluating pre-vetted developers through real work.
+
+## Core Offering
+
+- Pre-vetted engineering capacity for product teams
+- 72-hour shortlist target
+- Developer replacement at no extra cost if performance misses expectations
+- Unlimited replacement until the right developer is doing the job
+- Developers remain employed by Vedryx during evaluation, so clients avoid PIP and severance liability
+- Offline commercial contract between Vedryx and the client company
+
+## Primary Pages
+
+- Home: https://vedryx.com/
