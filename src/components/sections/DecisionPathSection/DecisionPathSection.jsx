@@ -76,11 +76,11 @@ export function DecisionPathSection() {
                 <input type="text" name="website" tabIndex="-1" autoComplete="off" />
               </label>
               <label>
-                <span>Work email</span>
+                <span>Work email <span className="required-mark">Required</span></span>
                 <input type="email" name="email" autoComplete="email" required />
               </label>
               <label>
-                <span>Phone number</span>
+                <span>Phone number <span className="required-mark">Required</span></span>
                 <input type="tel" name="phone" autoComplete="tel" required />
               </label>
               <label>
@@ -88,7 +88,7 @@ export function DecisionPathSection() {
                 <input type="text" name="company" autoComplete="organization" />
               </label>
               <label>
-                <span>Role needed</span>
+                <span>Role needed <span className="required-mark">Required</span></span>
                 <select name="role" defaultValue={roleOptions[0]} required>
                   {roleOptions.map((role) => (
                     <option value={role} key={role}>{role}</option>
@@ -96,7 +96,7 @@ export function DecisionPathSection() {
                 </select>
               </label>
               <label className="form-wide">
-                <span>Requirement summary</span>
+                <span>Requirement summary <span className="required-mark">Required</span></span>
                 <textarea name="summary" rows="4" required aria-describedby="requirement-help" />
                 <small id="requirement-help">Include stack, seniority, timeline, and what the first work should prove.</small>
               </label>

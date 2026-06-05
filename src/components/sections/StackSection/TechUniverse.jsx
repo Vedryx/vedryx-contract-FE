@@ -2,11 +2,15 @@ import { useEffect, useRef } from 'react'
 
 function getSceneLayout(width) {
   if (width < 520) {
-    return { cameraY: 10, cameraZ: 72, worldScale: 0.74, labelScale: 1, pointerX: 0.24, pointerY: 0.12 }
+    return { cameraY: 8.7, cameraZ: 52, worldScaleX: 0.76, worldScaleY: 0.95, worldScaleZ: 1.12, labelScale: 1.08, pointerX: 0.16, pointerY: 0.08 }
   }
 
   if (width < 900) {
     return { cameraY: 9.5, cameraZ: 56, worldScale: 0.84, labelScale: 1.18, pointerX: 0.34, pointerY: 0.16 }
+  }
+
+  if (width < 1100) {
+    return { cameraY: 9.5, cameraZ: 50, worldScale: 0.9, labelScale: 1, pointerX: 0.42, pointerY: 0.2 }
   }
 
   return { cameraY: 9, cameraZ: 42, worldScale: 1, labelScale: 1, pointerX: 0.5, pointerY: 0.22 }
@@ -102,7 +106,7 @@ export function TechUniverse() {
       spokes.renderOrder = 1
       group.add(spokes)
       labelObjects.forEach((object) => group.add(object))
-      return { group, dir: ring.dir, speed: ring.speed * 0.72, labels }
+      return { group, radius: ring.r, dir: ring.dir, speed: ring.speed * 0.72, labels }
     })
 
     const target = { x: 0, y: 0 }
@@ -122,11 +126,18 @@ export function TechUniverse() {
       camera.lookAt(0, 0, 0)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
-      world.scale.setScalar(layout.worldScale)
+      if (layout.worldScaleX) {
+        world.scale.set(layout.worldScaleX, layout.worldScaleY, layout.worldScaleZ)
+      } else {
+        world.scale.setScalar(layout.worldScale)
+      }
       pointerRange.x = layout.pointerX
       pointerRange.y = layout.pointerY
       rings.forEach((ring) => {
-        ring.labels.forEach((label) => label.scale.copy(label.userData.baseScale).multiplyScalar(layout.labelScale))
+        const ringScaleX = width < 520 && ring.radius >= 27 ? 0.62 : width < 520 && ring.radius >= 20 ? 0.8 : 1
+        const labelScale = layout.labelScale * (width < 520 && ring.radius >= 27 ? 0.72 : width < 520 && ring.radius >= 20 ? 0.86 : 1)
+        ring.group.scale.set(ringScaleX, 1, 1)
+        ring.labels.forEach((label) => label.scale.copy(label.userData.baseScale).multiplyScalar(labelScale))
       })
     }
 
@@ -221,5 +232,15 @@ export function TechUniverse() {
     }
   }, [])
 
-  return <div className="universe" id="universe" data-reveal data-delay="0.15" ref={mountRef} />
+  return (
+    <div
+      className="universe"
+      id="universe"
+      data-reveal
+      data-delay="0.15"
+      ref={mountRef}
+      role="img"
+      aria-label="Technology universe showing Java, Spring Boot, JavaScript, React, Node.js, Python, Flask, MongoDB, PostgreSQL, Redis, Kafka, ELK Stack, Data Engineering, Backend, Frontend, Full-stack, DevOps, and QA."
+    />
+  )
 }

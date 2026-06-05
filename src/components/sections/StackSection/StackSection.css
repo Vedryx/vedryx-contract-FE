@@ -7,4 +7,8 @@
   width: 420px; height: 420px; border-radius: 50%;
   background: radial-gradient(circle, rgba(109,139,255,0.16), transparent 65%); pointer-events: none;
 }
-@media (max-width: 760px){ .universe { height: 520px; } }
+@media (max-width: 760px){ .universe { height: 500px; } }
+@media (max-width: 520px){
+  .universe { height: 440px; }
+  .universe::after { width: 340px; height: 340px; }
+}

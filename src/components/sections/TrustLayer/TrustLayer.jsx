@@ -3,7 +3,7 @@ import './TrustLayer.css'
 
 export function TrustLayer() {
   return (
-    <section className="trust-layer" aria-label="Vedryx trust and vetting signals">
+    <section className="trust-layer" id="trust" aria-label="Vedryx trust and vetting signals">
       <div className="wrap">
         <div className="trust-panel" data-reveal>
           <div className="trust-intro">
@@ -23,11 +23,13 @@ export function TrustLayer() {
 
           <div className="vetting-strip" aria-label="Vedryx vetting includes">
             <span>Vetting includes</span>
-            <div>
+            <ul>
               {vettingSignals.map((item) => (
-                <b key={item}>{item}</b>
+                <li key={item}>
+                  <span>{item}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </div>
       </div>

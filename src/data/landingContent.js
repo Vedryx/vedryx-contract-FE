@@ -46,7 +46,7 @@ export const noRiskItems = [
 export const trustStats = [
   ['72h', 'to first shortlist', 'Fast enough for roadmap pressure, structured enough for HR review.'],
   ['0', 'PIP or severance liability', 'Developers stay employed by Vedryx, so underperformance is not your employment burden.'],
-  ['Any', 'replacements included', 'If the developer does not perform, Vedryx swaps again until the right fit is working.'],
+  ['No cap', 'replacements included', 'If the developer does not perform, Vedryx swaps again until the right fit is working.'],
 ]
 
 export const vettingSignals = [

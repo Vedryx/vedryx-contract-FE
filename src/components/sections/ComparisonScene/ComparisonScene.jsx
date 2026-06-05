@@ -4,7 +4,7 @@ import './ComparisonScene.css'
 function ComparisonColumn({ item }) {
   return (
     <div className={`compare-col ${item.tone}`}>
-      <div className="cc-head"><span className="cc-tag">{item.title}</span><span className="cc-sub">{item.subtitle}</span></div>
+      <div className="cc-head"><h3 className="cc-tag">{item.title}</h3><span className="cc-sub">{item.subtitle}</span></div>
       <ol className="csteps">
         {item.steps.map(([title, copy, state], index) => (
           <li className={`cstep ${state || ''}`} key={title}>

@@ -77,6 +77,13 @@ body.hero-done .hero h1 .ln > span { transform: none !important; opacity: 1 !imp
   .hero-sub { max-width: 46ch; }
 }
 
+@media (min-width: 561px) and (max-width: 980px) and (orientation: portrait) {
+  .hero {
+    min-height: auto;
+    padding-bottom: clamp(64px, 8vh, 88px);
+  }
+}
+
 @media (max-width: 560px) {
   .hero {
     min-height: 100svh;
@@ -137,7 +144,7 @@ body.hero-done .hero h1 .ln > span { transform: none !important; opacity: 1 !imp
 }
 
 @media (max-width: 374px) {
-  .hero { padding-top: 78px; }
+  .hero { padding-top: 88px; }
   .hero .wrap { gap: 11px; }
   .hero-badge { font-size: 11.5px; }
   .hero h1 { max-width: 10.8ch; }

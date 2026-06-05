@@ -10,10 +10,10 @@
 .compare-col.with { background: linear-gradient(180deg, rgba(109,139,255,0.09), rgba(109,139,255,0.015)); border-color: rgba(109,139,255,0.42); box-shadow: 0 30px 80px rgba(109,139,255,0.14); }
 body.no-highlight .compare-col.with { background: var(--panel); border-color: var(--border); box-shadow: none; }
 .cc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 14px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
-.cc-tag { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+.cc-tag { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
 .compare-col.without .cc-tag { color: #ff8a95; }
 .compare-col.with .cc-tag { color: var(--accent-ink); }
-.cc-sub { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+.cc-sub { font-size: 11.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .csteps { list-style: none; display: flex; flex-direction: column; flex: 1; }
 .cstep { display: flex; gap: 13px; align-items: flex-start; padding: 8px 0; border-top: 1px dashed var(--border); min-height: 42px; }
 .cstep:first-child { border-top: none; }
@@ -38,7 +38,7 @@ body.no-highlight .compare-col.with { background: var(--panel); border-color: va
   width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
   border: 1px solid var(--border-2); background: var(--bg-2); box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 3;
 }
-@media (max-width: 900px){
+@media (max-width: 980px){
   .compare { grid-template-columns: 1fr; }
   .vs { padding: 8px 0; }
 }
@@ -53,8 +53,10 @@ body.no-highlight .compare-col.with { background: var(--panel); border-color: va
   .compare-col { padding: 17px 18px; }
   .cc-head { gap: 8px; padding-bottom: 12px; }
   .cc-sub { font-size: 10px; letter-spacing: 0.13em; }
-  .cstep { gap: 11px; padding: 7px 0; min-height: 38px; }
+  .cstep { gap: 10px; padding: 6px 0; min-height: 36px; }
   .ct { font-size: 15px; }
+  .cs { font-size: 12.5px; line-height: 1.4; }
+  .cc-foot { margin-top: 12px; padding-top: 12px; }
   .vs { padding: 10px 0; }
   .vs span {
     width: 42px;

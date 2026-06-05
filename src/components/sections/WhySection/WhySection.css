@@ -8,9 +8,9 @@
 .why-card {
   border: 1px solid var(--border); border-radius: var(--r); padding: 24px;
   background: var(--panel); min-height: 180px; display: flex; flex-direction: column; gap: 12px;
-  transition: background .35s, border-color .35s, transform .35s;
+  transition: background .35s, border-color .35s;
 }
-.why-card:hover { background: var(--panel-2); border-color: var(--border-2); transform: translateY(-4px); }
+.why-card:hover { background: var(--panel-2); border-color: var(--border-2); }
 .why-card .w-ico { width: 30px; height: 30px; color: var(--accent); }
 .why-card .w-t { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin-top: auto; }
 .why-card .w-s { font-size: 13.5px; color: var(--muted); }
