@@ -1,0 +1,34 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#05060c"/>
+  <path d="M0 0h1200v630H0z" fill="url(#bg)"/>
+  <path d="M790 126c86 0 156 70 156 156s-70 156-156 156-156-70-156-156 70-156 156-156Z" stroke="#6d8bff" stroke-width="2" stroke-opacity=".36"/>
+  <path d="M790 68c118 0 214 96 214 214s-96 214-214 214-214-96-214-214S672 68 790 68Z" stroke="#46d9ff" stroke-width="1.5" stroke-opacity=".2"/>
+  <path d="M790 204 858 244v78l-68 40-68-40v-78l68-40Z" stroke="#aebfff" stroke-width="4"/>
+  <path d="M790 244 824 264v38l-34 20-34-20v-38l34-20Z" fill="#6d8bff" fill-opacity=".28" stroke="#46d9ff" stroke-width="3"/>
+  <g opacity=".74">
+    <circle cx="666" cy="188" r="8" fill="#46d9ff"/>
+    <circle cx="928" cy="205" r="7" fill="#6d8bff"/>
+    <circle cx="996" cy="372" r="8" fill="#46d9ff"/>
+    <circle cx="642" cy="389" r="7" fill="#6d8bff"/>
+    <path d="M666 188 790 282 928 205M790 282l206 90M790 282 642 389" stroke="#aebfff" stroke-opacity=".32" stroke-width="2"/>
+  </g>
+  <text x="86" y="112" fill="#eef0f8" font-family="Space Grotesk, Arial, sans-serif" font-size="42" font-weight="700">Vedryx</text>
+  <text x="86" y="218" fill="#eef0f8" font-family="Space Grotesk, Arial, sans-serif" font-size="74" font-weight="700">Hire Dedicated</text>
+  <text x="86" y="304" fill="#eef0f8" font-family="Space Grotesk, Arial, sans-serif" font-size="74" font-weight="700">Remote Developers</text>
+  <text x="86" y="372" fill="#aebfff" font-family="Hanken Grotesk, Arial, sans-serif" font-size="32" font-weight="600">India-based vetted talent for global product teams.</text>
+  <g font-family="Hanken Grotesk, Arial, sans-serif" font-size="25" font-weight="700">
+    <rect x="86" y="438" width="188" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
+    <text x="116" y="473" fill="#c9d3ff">72h shortlist</text>
+    <rect x="292" y="438" width="166" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
+    <text x="322" y="473" fill="#c9d3ff">Guarantee</text>
+    <rect x="574" y="438" width="226" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
+    <text x="604" y="473" fill="#c9d3ff">No PIP/severance</text>
+  </g>
+  <defs>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(900 260) rotate(143) scale(780 614)">
+      <stop stop-color="#1b2b70"/>
+      <stop offset=".45" stop-color="#081226"/>
+      <stop offset="1" stop-color="#05060c"/>
+    </radialGradient>
+  </defs>
+</svg>

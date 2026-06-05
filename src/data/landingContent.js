@@ -14,15 +14,15 @@ export const comparison = {
   },
   with: {
     title: 'With Vedryx',
-    subtitle: 'Risk-free capacity',
+    subtitle: 'Dedicated remote developers',
     tone: 'with',
-    chips: ['Unlimited replacement', 'No PIP or severance'],
+    chips: ['Replacement guarantee', 'No PIP or severance'],
     steps: [
-      ['Skip resume screening', 'Vedryx brings pre-vetted developers', 'good'],
+      ['Skip resume screening', 'Vedryx brings pre-vetted dedicated remote developers', 'good'],
       ['Get matched in 72h', 'Interview overhead drops to fit review'],
-      ['Developer starts', 'Judge performance through real work'],
+      ['Developer starts full-time', 'Judge performance through real product work'],
       ['Not performing?', 'Vedryx replaces them at no extra cost', 'loop'],
-      ['Repeat until right', 'Swap as many times as needed', 'good'],
+      ['Guarantee period protects fit', 'Swap during the agreed period if performance misses', 'good'],
     ],
   },
 }
@@ -32,7 +32,7 @@ export const guarantees = [
   'No interview scheduling',
   'No PIP liability',
   'No severance costs',
-  'Unlimited replacement',
+  'Replacement during the agreed guarantee period',
 ]
 
 export const noRiskItems = [
@@ -46,7 +46,7 @@ export const noRiskItems = [
 export const trustStats = [
   ['72h', 'to first shortlist', 'Fast enough for roadmap pressure, structured enough for HR review.'],
   ['0', 'PIP or severance liability', 'Developers stay employed by Vedryx, so underperformance is not your employment burden.'],
-  ['No cap', 'replacements included', 'If the developer does not perform, Vedryx swaps again until the right fit is working.'],
+  ['Full-time', 'dedicated developers', 'India-based remote developers work inside your tools, meetings, and delivery workflow.'],
 ]
 
 export const vettingSignals = [
@@ -57,11 +57,11 @@ export const vettingSignals = [
 ]
 
 export const whyCards = [
-  ['shield', 'Risk-Free Engagement', "Decide after you've seen real output."],
+  ['shield', 'Risk-Free Engagement', "Decide after you've seen real output from a dedicated developer."],
   ['bolt', 'Fast Team Scaling', 'Add senior engineers in days, not quarters.'],
-  ['replace', 'Unlimited Replacement', 'If performance misses, Vedryx swaps at no extra cost.'],
+  ['replace', 'Replacement Guarantee', 'If performance misses, Vedryx swaps at no extra cost during the agreed guarantee period.'],
   ['check', 'No Screening Grind', 'Skip resume piles, cold calls, and interview scheduling.'],
-  ['globe', 'Wide Technology Coverage', 'Backend to AI, cloud to mobile.'],
+  ['globe', 'India-Based Remote Talent', 'Hire vetted developers from India for global product teams.'],
   ['contract', 'No PIP Or Severance', 'The developer stays on Vedryx payroll, not yours.'],
 ]
 
@@ -89,7 +89,24 @@ export const roleOptions = [
 
 export const engagementAssurances = [
   'Developer stays on Vedryx payroll',
-  'Unlimited replacement at no extra cost',
+  'Replacement at no extra cost during the agreed guarantee period',
   'Contract is between Vedryx and your company',
   'No PIP or severance liability',
 ]
+
+export const technologyGroups = [
+  {
+    title: 'Frontend and full-stack developers',
+    items: ['React developers', 'JavaScript developers', 'Full-stack developers', 'Frontend developers'],
+  },
+  {
+    title: 'Backend and platform developers',
+    items: ['Node.js developers', 'Python developers', 'Java Spring Boot developers', 'Backend developers'],
+  },
+  {
+    title: 'Data, cloud, and quality engineers',
+    items: ['Data engineers', 'DevOps engineers', 'Cloud engineers', 'QA automation engineers'],
+  },
+]
+
+export const serviceAreas = ['United States', 'United Kingdom', 'Europe', 'Australia', 'Middle East', 'India']

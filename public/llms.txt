@@ -4,12 +4,14 @@ Vedryx helps product and HR teams skip resume screening, calls, and interview sc
 
 ## Core Offering
 
-- Pre-vetted engineering capacity for product teams
+- India-based vetted remote developers for global product teams
+- Full-time dedicated developers who work inside client tools, meetings, and delivery workflows
+- React, Node.js, Python, Java Spring Boot, DevOps, cloud, data, QA automation, frontend, backend, and full-stack developers
 - 72-hour shortlist target
-- Developer replacement at no extra cost if performance misses expectations
-- Unlimited replacement until the right developer is doing the job
+- Developer replacement at no extra cost during the agreed guarantee period if performance misses expectations
 - Developers remain employed by Vedryx during evaluation, so clients avoid PIP and severance liability
 - Offline commercial contract between Vedryx and the client company
+- Service areas include the United States, United Kingdom, Europe, Australia, Middle East, and India
 
 ## Primary Pages
 
