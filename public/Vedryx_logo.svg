@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="200" viewBox="0 0 640 200" fill="none">
+  <path d="M22 46 L62 142 L106 30" stroke="#4E99F0" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="112" y="150" font-family="'Space Grotesk', 'Hanken Grotesk', sans-serif" font-weight="700" font-size="118" letter-spacing="-2">
+    <tspan fill="#FFFFFF">ed</tspan><tspan fill="#C7CCD6">ryx</tspan>
+  </text>
+</svg>
