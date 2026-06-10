@@ -21,8 +21,8 @@ export function HeroSection() {
           <a href="#submit" className="btn btn-ghost">Contact Vedryx</a>
         </div>
         <div className="hero-proofline" aria-label="Vedryx engagement safeguards">
-          <span>First shortlist in 72 hours</span>
           <span>Unlimited replacement</span>
+          <span>72-hour replacement SLA</span>
           <span>No PIP or severance liability</span>
         </div>
       </div>
