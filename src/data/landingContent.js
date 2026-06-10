@@ -1,6 +1,6 @@
 export const comparison = {
   without: {
-    title: 'Without Vedryx',
+    title: 'Without Vedryx Core',
     subtitle: 'Traditional hiring',
     tone: 'without',
     chips: ['3-6 months lost', 'PIP + severance risk'],
@@ -13,15 +13,15 @@ export const comparison = {
     ],
   },
   with: {
-    title: 'With Vedryx',
+    title: 'With Vedryx Core',
     subtitle: 'Dedicated remote developers',
     tone: 'with',
     chips: ['Replacement guarantee', 'No PIP or severance'],
     steps: [
-      ['Skip resume screening', 'Vedryx brings pre-vetted dedicated remote developers', 'good'],
+      ['Skip resume screening', 'Vedryx Core brings pre-vetted dedicated remote developers', 'good'],
       ['Get matched in 72h', 'Interview overhead drops to fit review'],
       ['Developer starts full-time', 'Judge performance through real product work'],
-      ['Not performing?', 'Vedryx replaces them at no extra cost', 'loop'],
+      ['Not performing?', 'Vedryx Core replaces them at no extra cost', 'loop'],
       ['Guarantee period protects fit', 'Swap during the agreed period if performance misses', 'good'],
     ],
   },
@@ -59,7 +59,7 @@ export const vettingSignals = [
 export const whyCards = [
   ['shield', 'Risk-Free Engagement', "Decide after you've seen real output from a dedicated developer."],
   ['bolt', 'Fast Team Scaling', 'Add senior engineers in days, not quarters.'],
-  ['replace', 'Replacement Guarantee', 'If performance misses, Vedryx swaps at no extra cost during the agreed guarantee period.'],
+  ['replace', 'Replacement Guarantee', 'If performance misses, Vedryx Core swaps at no extra cost during the agreed guarantee period.'],
   ['check', 'No Screening Grind', 'Skip resume piles, cold calls, and interview scheduling.'],
   ['globe', 'India-Based Remote Talent', 'Hire vetted developers from India for global product teams.'],
   ['contract', 'No PIP Or Severance', 'The developer stays on Vedryx payroll, not yours.'],
@@ -67,8 +67,8 @@ export const whyCards = [
 
 export const decisionSteps = [
   ['Submit requirement', 'Share the role, contact details, and project context.'],
-  ['Vedryx reviews fit', 'We assess the requirement against available vetted engineering capacity.'],
-  ['Get a callback', 'Vedryx contacts your HR or hiring team by phone or email.'],
+  ['Vedryx Core reviews fit', 'We assess the requirement against available vetted engineering capacity.'],
+  ['Get a callback', 'Vedryx Core contacts your HR or hiring team by phone or email.'],
   ['Contract offline with Vedryx', 'Commercials, contract, payroll, and developer transactions stay offline with Vedryx.'],
 ]
 

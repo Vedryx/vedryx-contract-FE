@@ -9,7 +9,7 @@ export function Nav() {
         <a href="#problem">The Difference</a>
         <a href="#engine">How It Works</a>
         <a href="#stack">Technologies</a>
-        <a href="#why">Why Vedryx</a>
+        <a href="#why">Why Vedryx Core</a>
       </div>
       <div className="nav-cta">
         <a href="#submit" className="btn btn-ghost nav-btn">Contact Vedryx</a>

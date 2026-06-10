@@ -30,7 +30,7 @@ export function NotFoundPage() {
         </EmptyHeader>
         <EmptyContent style={{ marginTop: 'clamp(20px, 4%, 28px)' }}>
           <Link className="btn btn-primary w-full justify-center sm:w-auto" to="/">
-            Return to Vedryx <span className="arrow">→</span>
+            Return to Vedryx Core <span className="arrow">→</span>
           </Link>
         </EmptyContent>
       </Empty>

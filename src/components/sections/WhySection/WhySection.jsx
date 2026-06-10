@@ -6,7 +6,7 @@ export function WhySection() {
   return (
     <section className="section-pad utility-section bg-band" id="why">
       <div className="wrap">
-        <span className="eyebrow" data-reveal>Why companies choose Vedryx</span>
+        <span className="eyebrow" data-reveal>Why companies choose Vedryx Core</span>
         <h2 className="section-title utility-title why-title" data-reveal data-delay="0.05">Capacity you can scale and unwind at will.</h2>
         <div className="why-grid">
           {whyCards.map(([icon, title, copy], index) => (

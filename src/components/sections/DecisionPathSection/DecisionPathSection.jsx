@@ -44,15 +44,15 @@ export function DecisionPathSection() {
         <div className="decision-path-head">
           <div>
             <span className="eyebrow" data-reveal>HR decision path</span>
-            <h2 className="section-title product-title decision-title" data-reveal data-delay="0.05">Submit the requirement. Vedryx handles the hiring risk.</h2>
+            <h2 className="section-title product-title decision-title" data-reveal data-delay="0.05">Submit the requirement. Vedryx Core handles the hiring risk.</h2>
           </div>
           <p className="lead decision-copy" data-reveal data-delay="0.1">
-            Share the role context and contact details. Vedryx reviews the requirement, calls your team back, and handles the offline engagement with your company while the developer remains on Vedryx payroll.
+            Share the role context and contact details. Vedryx Core reviews the requirement, calls your team back, and handles the offline engagement with your company while the developer remains on Vedryx payroll.
           </p>
         </div>
 
         <div className="decision-path-grid">
-          <div className="decision-steps" data-reveal data-delay="0.12" aria-label="Vedryx requirement process">
+          <div className="decision-steps" data-reveal data-delay="0.12" aria-label="Vedryx Core requirement process">
             {decisionSteps.map(([title, copy], index) => (
               <article className="decision-step" key={title}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
@@ -67,7 +67,7 @@ export function DecisionPathSection() {
           <form className="decision-form" onSubmit={handleSubmit} data-reveal data-delay="0.16">
             <div className="form-head">
               <span>Requirement callback</span>
-              <p>Vedryx may contact you by phone or email after reviewing the requirement.</p>
+              <p>Vedryx Core may contact you by phone or email after reviewing the requirement.</p>
             </div>
 
             <div className="form-grid">
@@ -111,12 +111,12 @@ export function DecisionPathSection() {
             )}
 
             {submitted && (
-              <p className="form-success" role="status">Requirement received. Vedryx will contact you by phone or email.</p>
+              <p className="form-success" role="status">Requirement received. Vedryx Core will contact you by phone or email.</p>
             )}
           </form>
         </div>
 
-        <div className="engagement-assurances" data-reveal data-delay="0.18" aria-label="Vedryx engagement terms">
+        <div className="engagement-assurances" data-reveal data-delay="0.18" aria-label="Vedryx Core engagement terms">
           {engagementAssurances.map((item) => (
             <span key={item}>{item}</span>
           ))}
@@ -127,7 +127,7 @@ export function DecisionPathSection() {
         <div className="callback-modal" role="dialog" aria-modal="true" aria-labelledby="callback-modal-title">
           <div className="callback-modal-panel">
             <span className="eyebrow">Request received</span>
-            <h3 id="callback-modal-title">Vedryx will contact you shortly.</h3>
+            <h3 id="callback-modal-title">Vedryx Core will contact you shortly.</h3>
             <p>We have received your requirement. Our team will review it and contact you by phone or email.</p>
             <button type="button" className="btn btn-primary" onClick={() => setSubmitted(false)}>Close</button>
           </div>

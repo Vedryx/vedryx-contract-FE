@@ -1,6 +1,6 @@
-# Vedryx
+# Vedryx Core
 
-Vedryx helps product and HR teams skip resume screening, calls, and interview scheduling by evaluating pre-vetted developers through real work.
+Vedryx Core helps product and HR teams skip resume screening, calls, and interview scheduling by evaluating pre-vetted developers through real work.
 
 ## Core Offering
 

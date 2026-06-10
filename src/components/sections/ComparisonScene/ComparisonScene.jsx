@@ -27,7 +27,7 @@ export function ComparisonScene() {
   return (
     <section className="section-pad utility-section compare-section" id="problem">
       <div className="wrap">
-        <span className="eyebrow" data-reveal>With vs without Vedryx</span>
+        <span className="eyebrow" data-reveal>With vs without Vedryx Core</span>
         <h2 className="section-title utility-title compact-title" data-reveal data-delay="0.05">One requirement. Two very different outcomes.</h2>
         <p className="lead compare-lead" data-reveal data-delay="0.1">Same requirement, very different risk: traditional hiring makes you screen, interview, manage underperformance, and pay to exit.</p>
         <div className="compare" data-reveal data-delay="0.15">

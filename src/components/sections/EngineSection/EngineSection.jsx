@@ -12,7 +12,7 @@ export function EngineSection() {
           <ol className="pipeline" data-reveal data-delay="0.1">
             <li className="step"><span className="idx">1</span><div><div className="s-t">Developer joins your team</div><div className="s-s">Embedded and shipping from day one.</div></div></li>
             <li className="step decision"><span className="idx">?</span><div><div className="s-t">Not performing?</div><div className="s-s">Delivery, communication, or technical output misses the mark.</div></div><span className="loop">↻ replace</span></li>
-            <li className="step"><span className="idx">2</span><div><div className="s-t">Vedryx swaps them</div><div className="s-s">A new developer steps in - no PIP, no severance, no added cost.</div></div></li>
+            <li className="step"><span className="idx">2</span><div><div className="s-t">Vedryx Core swaps them</div><div className="s-s">A new developer steps in - no PIP, no severance, no added cost.</div></div></li>
             <li className="step loopback"><span className="idx">↻</span><div><div className="s-t">Repeat until it works</div><div className="s-s">Replace as many times as needed until the right developer is doing the job.</div></div></li>
           </ol>
           <aside className="engine-aside" data-reveal data-delay="0.18">
