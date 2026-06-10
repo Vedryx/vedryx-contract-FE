@@ -19,10 +19,10 @@ export const comparison = {
     chips: ['Replacement guarantee', 'No PIP or severance'],
     steps: [
       ['Skip resume screening', 'Vedryx brings pre-vetted dedicated remote developers', 'good'],
-      ['Get matched in 72h', 'Interview overhead drops to fit review'],
+      ['Get matched to vetted talent', 'Interview overhead drops to fit review'],
       ['Developer starts full-time', 'Judge performance through real product work'],
       ['Not performing?', 'Vedryx replaces them at no extra cost', 'loop'],
-      ['Guarantee period protects fit', 'Swap during the agreed period if performance misses', 'good'],
+      ['72-hour replacement SLA', 'From your written notice, a vetted replacement shortlist within 72 hours', 'good'],
     ],
   },
 }
@@ -44,7 +44,7 @@ export const noRiskItems = [
 ]
 
 export const trustStats = [
-  ['72h', 'to first shortlist', 'Fast enough for roadmap pressure, structured enough for HR review.'],
+  ['72h', 'replacement SLA', 'From your written notice of dissatisfaction to a vetted replacement shortlist — within 72 hours.'],
   ['0', 'PIP or severance liability', 'Developers stay employed by Vedryx, so underperformance is not your employment burden.'],
   ['Full-time', 'dedicated developers', 'India-based remote developers work inside your tools, meetings, and delivery workflow.'],
 ]

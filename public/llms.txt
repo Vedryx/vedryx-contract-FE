@@ -7,7 +7,7 @@ Vedryx helps product and HR teams skip resume screening, calls, and interview sc
 - India-based vetted remote developers for global product teams
 - Full-time dedicated developers who work inside client tools, meetings, and delivery workflows
 - React, Node.js, Python, Java Spring Boot, DevOps, cloud, data, QA automation, frontend, backend, and full-stack developers
-- 72-hour shortlist target
+- 72-hour replacement SLA: from a client's written notice of dissatisfaction, Vedryx delivers a vetted replacement shortlist within 72 hours
 - Developer replacement at no extra cost during the agreed guarantee period if performance misses expectations
 - Developers remain employed by Vedryx during evaluation, so clients avoid PIP and severance liability
 - Offline commercial contract between Vedryx and the client company
