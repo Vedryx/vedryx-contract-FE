@@ -11,6 +11,8 @@ node_modules
 .venv/
 dist
 dist-ssr
+test-results
+playwright-report
 *.local
 .seo-cache/
 
