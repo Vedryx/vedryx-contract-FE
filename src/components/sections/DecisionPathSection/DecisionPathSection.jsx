@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { decisionSteps, engagementAssurances, roleOptions } from '../../../data/landingContent.js'
+import { track } from '../../../utils/posthog.js'
 import './DecisionPathSection.css'
 
 export function DecisionPathSection() {
@@ -15,6 +16,10 @@ export function DecisionPathSection() {
 
     setError('')
     setSubmitting(true)
+    track('form_submit_attempt', {
+      site: 'vedryx-core-web',
+      role: payload.role || 'unknown',
+    })
 
     try {
       const response = await fetch('/api/callback', {
@@ -30,9 +35,18 @@ export function DecisionPathSection() {
 
       form.reset()
       setSubmitted(true)
+      track('form_submit_success', {
+        site: 'vedryx-core-web',
+        role: payload.role || 'unknown',
+      })
     } catch (submitError) {
       setError(submitError.message)
       setSubmitted(false)
+      track('form_submit_error', {
+        site: 'vedryx-core-web',
+        role: payload.role || 'unknown',
+        kind: 'client_or_api_error',
+      })
     } finally {
       setSubmitting(false)
     }
