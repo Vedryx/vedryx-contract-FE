@@ -1,20 +1,55 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+/**
+ * Defer Three.js init until the browser is idle.
+ *
+ * Why: Three.js bundles (~525KB raw / ~140KB gz) were evaluating on the
+ * critical path on mobile, blocking the main thread for ~7.5s and pushing
+ * LCP to 5.7s on Moto-G4-class hardware. Desktop perf was already fine.
+ *
+ * Strategy:
+ *   1. Render a CSS-only static fallback synchronously so the hero is
+ *      painted before any JS evaluation (the SSR/prerender step ships this
+ *      markup, so it shows up in the HTML response too — no flash).
+ *   2. On the client, if the user prefers reduced motion, skip Three.js
+ *      entirely and leave the static fallback in place permanently.
+ *   3. Otherwise, schedule the dynamic-import + scene setup via
+ *      `requestIdleCallback` (timeout 2000ms) so it runs after LCP fires.
+ *      Safari/iOS (which still don't ship RIC as of mid-2026) fall back to
+ *      `setTimeout(..., 0)` — runs after the current task, post first paint.
+ *   4. Once the canvas is mounted, fade out the static fallback. No layout
+ *      shift because both share the same absolutely-positioned wrapper.
+ */
 export function HeroScene() {
   const mountRef = useRef(null)
+  const [canvasReady, setCanvasReady] = useState(false)
 
   useEffect(() => {
     const mount = mountRef.current
     if (!mount) return undefined
+
+    // If the user prefers reduced motion, do NOT load Three.js at all.
+    // The static fallback remains visible permanently — no JS cost, no
+    // animation, fully accessible.
+    const reduced =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (reduced) return undefined
+
     let cleanupScene = null
     let cancelled = false
+    let idleHandle = null
+    let timeoutHandle = null
 
     async function setupScene() {
+      if (cancelled || !mount.isConnected) return
+
       const { THREE, disposeScene, makeGlowTexture } = await import('../../../utils/threeScene.js')
 
       if (cancelled || !mount.isConnected) return
 
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       const scene = new THREE.Scene()
       scene.fog = new THREE.FogExp2(0x05060c, 0.016)
 
@@ -28,6 +63,7 @@ export function HeroScene() {
         powerPreference: 'high-performance',
       })
       renderer.setClearColor(0x000000, 0)
+      renderer.domElement.className = 'scene-canvas'
       mount.appendChild(renderer.domElement)
 
       const glow = makeGlowTexture()
@@ -225,7 +261,7 @@ export function HeroScene() {
       }
 
       function renderFrame(animate = true) {
-        time += reduced ? 0 : 0.004
+        time += 0.004
         const array = pointGeometry.attributes.position.array
         for (let index = 0; index < count; index += 1) {
           const seed = seeds[index]
@@ -256,11 +292,11 @@ export function HeroScene() {
       function tick() {
         frame = 0
         renderFrame()
-        if (visible && !reduced) start()
+        if (visible) start()
       }
 
       function start() {
-        if (frame || reduced) return
+        if (frame) return
         frame = requestAnimationFrame(tick)
       }
 
@@ -273,10 +309,7 @@ export function HeroScene() {
       resize()
       renderFrame(false)
       window.addEventListener('resize', resize)
-      if (!reduced)
-        window.addEventListener('pointermove', onPointerMove, {
-          passive: true,
-        })
+      window.addEventListener('pointermove', onPointerMove, { passive: true })
 
       const observer = new IntersectionObserver(
         (entries) => {
@@ -295,13 +328,17 @@ export function HeroScene() {
       )
 
       observer.observe(mount)
-      if (!reduced) start()
+      start()
+
+      // Flip the canvas-ready flag so the static fallback fades out.
+      // Done after first render so we never have a blank frame.
+      if (!cancelled) setCanvasReady(true)
 
       cleanupScene = () => {
         stop()
         observer.disconnect()
         window.removeEventListener('resize', resize)
-        if (!reduced) window.removeEventListener('pointermove', onPointerMove)
+        window.removeEventListener('pointermove', onPointerMove)
         if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
         disposeScene(scene)
         glow.dispose()
@@ -309,13 +346,29 @@ export function HeroScene() {
       }
     }
 
-    setupScene()
+    // Schedule init for browser idle time. `requestIdleCallback` lets the
+    // browser paint LCP first, then run our setup when the main thread is
+    // free. Safari/iOS still don't ship it (as of mid-2026), so fall back
+    // to `setTimeout(..., 0)` — runs after the current task / first paint.
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      idleHandle = window.requestIdleCallback(() => setupScene(), { timeout: 2000 })
+    } else {
+      timeoutHandle = setTimeout(() => setupScene(), 0)
+    }
 
     return () => {
       cancelled = true
+      if (idleHandle != null && typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleHandle)
+      }
+      if (timeoutHandle != null) clearTimeout(timeoutHandle)
       cleanupScene?.()
     }
   }, [])
 
-  return <div id="scene" ref={mountRef} />
+  return (
+    <div id="scene" ref={mountRef} aria-hidden="true">
+      <div className={`scene-fallback${canvasReady ? ' is-hidden' : ''}`} />
+    </div>
+  )
 }
