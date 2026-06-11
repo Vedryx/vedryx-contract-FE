@@ -15,6 +15,7 @@ test-results
 playwright-report
 *.local
 .seo-cache/
+.vercel/
 
 # Editor directories and files
 .codex
