@@ -22,7 +22,7 @@ test.describe('homepage SSR output', () => {
     expect(html).toContain('Replace until they perform.')
     // Hero badge and proofline must also be present pre-hydration.
     expect(html).toContain('No PIP, no severance, unlimited replacement')
-    expect(html).toContain('First shortlist in 72 hours')
+    expect(html).toContain('72-hour replacement SLA')
   })
 
   test('renders canonical URL and OG tags in head', async () => {
