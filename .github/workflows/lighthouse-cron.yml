@@ -1,0 +1,155 @@
+name: Lighthouse weekly cron
+
+# Runs against production every Monday 06:00 IST = 00:30 UTC.
+# Also manually triggerable for spot checks.
+# Free GitHub Actions runner only — ₹0 ongoing.
+on:
+  schedule:
+    - cron: '30 0 * * 1' # Monday 00:30 UTC = 06:00 IST
+  workflow_dispatch: {}
+
+permissions:
+  contents: write       # to commit lighthouse-history JSON back to main
+  pull-requests: write  # to comment delta on any open PR
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        form_factor: [mobile, desktop]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Run Lighthouse CI (${{ matrix.form_factor }})
+        id: lhci
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          configPath: .lighthouse/lighthouserc-${{ matrix.form_factor }}.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Archive run JSON into lighthouse-history/
+        id: archive
+        run: |
+          set -euo pipefail
+          STAMP=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
+          OUT_DIR=".lighthouseci"
+          DEST_DIR="lighthouse-history/${{ matrix.form_factor }}"
+          mkdir -p "$DEST_DIR"
+          # Lighthouse CI writes one .json per run (we use 3 runs); keep the median.
+          MEDIAN=$(ls "$OUT_DIR" | grep -E 'lhr-[0-9]+\.json$' | sort | sed -n '2p')
+          if [ -z "$MEDIAN" ]; then
+            MEDIAN=$(ls "$OUT_DIR" | grep -E 'lhr-[0-9]+\.json$' | head -n1)
+          fi
+          cp "$OUT_DIR/$MEDIAN" "$DEST_DIR/${STAMP}.json"
+          echo "report_path=$DEST_DIR/${STAMP}.json" >> "$GITHUB_OUTPUT"
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+
+      - name: Compute score delta vs previous report
+        id: delta
+        run: |
+          set -euo pipefail
+          DEST_DIR="lighthouse-history/${{ matrix.form_factor }}"
+          NEW="${{ steps.archive.outputs.report_path }}"
+          PREV=$(ls "$DEST_DIR"/*.json 2>/dev/null | grep -v "$(basename "$NEW")" | sort | tail -n1 || true)
+          read_score() {
+            jq -r ".categories.\"$2\".score // 0" "$1" | awk '{printf "%d\n", $1 * 100}'
+          }
+          NP=$(read_score "$NEW" performance)
+          NA=$(read_score "$NEW" accessibility)
+          NB=$(read_score "$NEW" best-practices)
+          NS=$(read_score "$NEW" seo)
+          if [ -n "$PREV" ]; then
+            PP=$(read_score "$PREV" performance)
+            PA=$(read_score "$PREV" accessibility)
+            PB=$(read_score "$PREV" best-practices)
+            PS=$(read_score "$PREV" seo)
+            DP=$((NP - PP)); DA=$((NA - PA)); DB=$((NB - PB)); DS=$((NS - PS))
+            PREV_NAME=$(basename "$PREV")
+          else
+            PP=- ; PA=- ; PB=- ; PS=-
+            DP=- ; DA=- ; DB=- ; DS=-
+            PREV_NAME="(no prior report)"
+          fi
+          {
+            echo "form_factor=${{ matrix.form_factor }}"
+            echo "perf=$NP"; echo "a11y=$NA"; echo "bp=$NB"; echo "seo=$NS"
+            echo "perf_prev=$PP"; echo "a11y_prev=$PA"; echo "bp_prev=$PB"; echo "seo_prev=$PS"
+            echo "perf_delta=$DP"; echo "a11y_delta=$DA"; echo "bp_delta=$DB"; echo "seo_delta=$DS"
+            echo "prev_name=$PREV_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Commit history JSON
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add lighthouse-history
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(lighthouse): ${{ matrix.form_factor }} report ${{ steps.archive.outputs.stamp }} [skip ci]"
+          git push origin HEAD:main
+
+      - name: Comment delta on open PRs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const ff = '${{ steps.delta.outputs.form_factor }}';
+            const cur = {
+              perf: '${{ steps.delta.outputs.perf }}',
+              a11y: '${{ steps.delta.outputs.a11y }}',
+              bp:   '${{ steps.delta.outputs.bp }}',
+              seo:  '${{ steps.delta.outputs.seo }}',
+            };
+            const prev = {
+              perf: '${{ steps.delta.outputs.perf_prev }}',
+              a11y: '${{ steps.delta.outputs.a11y_prev }}',
+              bp:   '${{ steps.delta.outputs.bp_prev }}',
+              seo:  '${{ steps.delta.outputs.seo_prev }}',
+            };
+            const delta = {
+              perf: '${{ steps.delta.outputs.perf_delta }}',
+              a11y: '${{ steps.delta.outputs.a11y_delta }}',
+              bp:   '${{ steps.delta.outputs.bp_delta }}',
+              seo:  '${{ steps.delta.outputs.seo_delta }}',
+            };
+            const fmt = (d) => d === '-' ? '—' : (Number(d) > 0 ? `+${d}` : `${d}`);
+
+            const body = [
+              `### Lighthouse weekly (${ff}) — vedryxtech.com`,
+              ``,
+              `| Category | Previous | Current | Δ |`,
+              `|---|---:|---:|---:|`,
+              `| Performance | ${prev.perf} | **${cur.perf}** | ${fmt(delta.perf)} |`,
+              `| Accessibility | ${prev.a11y} | **${cur.a11y}** | ${fmt(delta.a11y)} |`,
+              `| Best practices | ${prev.bp} | **${cur.bp}** | ${fmt(delta.bp)} |`,
+              `| SEO | ${prev.seo} | **${cur.seo}** | ${fmt(delta.seo)} |`,
+              ``,
+              `Vs previous: \`${{ steps.delta.outputs.prev_name }}\`.`,
+              `History: [lighthouse-history/${ff}/](../tree/main/lighthouse-history/${ff})`,
+            ].join('\n');
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+            for (const pr of prs) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body,
+              });
+            }
