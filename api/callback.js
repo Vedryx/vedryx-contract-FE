@@ -1,4 +1,5 @@
 import { getDatabaseName, getMongoClient } from './_mongo.js'
+import { captureRouteError } from './_sentry.js'
 
 const REQUIRED_FIELDS = ['email', 'phone', 'role', 'summary']
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -69,6 +70,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error('Callback request failed', error)
+    await captureRouteError(req, error, { source: 'vedryx-landing' })
     return res.status(500).json({ ok: false, message: 'Unable to submit the request right now.' })
   }
 }
