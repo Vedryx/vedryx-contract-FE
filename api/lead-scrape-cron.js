@@ -112,8 +112,10 @@ const CORE_EMPLOYEE_ACTOR_INPUT = {
   maxTotalChargeUsd: PER_RUN_MAX_USD['harvestapi/linkedin-company-employees'],
   // RA §6.2 upstream quality filters — every match here is billed against
   // FEWER items (vs filtering client-side and paying for the full pull).
-  seniorityLevelIds: [120, 130, 220, 300, 310], // Senior / Strategic / Director / VP / CXO
-  functionIds: [8, 12],                          // Engineering + HR
+  // Live Apify build schema (btXbM48jsC4dsKfZ5) declares these as string[]
+  // (items.type: "string"). Integer arrays trigger silent per-stage 400s.
+  seniorityLevelIds: ['120', '130', '220', '300', '310'], // Senior / Strategic / Director / VP / CXO
+  functionIds: ['8', '12'],                                // Engineering + HR
   jobTitles: [
     'Head of Engineering', 'VP Engineering', 'VP of Engineering',
     'CTO', 'Engineering Manager', 'Director of Engineering',
@@ -131,7 +133,7 @@ const CORE_EMPLOYEE_ACTOR_INPUT = {
   //   96 = IT Services and IT Consulting
   //   43 = Financial Services
   // Source: github.com/HarvestAPI/linkedin-industry-codes-v2
-  industryIds: [4, 6, 96, 43],
+  industryIds: ['4', '6', '96', '43'],
   // companies injected at runtime from getSeedBatch() — same seed set as core-companies.
 }
 
@@ -164,7 +166,7 @@ const PULSE_POST_ACTOR_INPUT = {
   maxPosts: 10,                              // per-query Actor-native throttle
   maxTotalChargeUsd: PER_RUN_MAX_USD['harvestapi/linkedin-post-search'],
   authorKeywords: 'founder OR co-founder OR ceo OR "solo founder" OR "indie maker"',
-  authorsIndustryId: [4, 6, 96],            // verified CSV IDs (RA §6.3)
+  authorsIndustryId: ['4', '6', '96'],      // verified CSV IDs (RA §6.3); live schema = string[]
 }
 
 // -------------------- Run pipeline for one actor --------------------
