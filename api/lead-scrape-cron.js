@@ -24,7 +24,10 @@ import {
   budgetState,
   projectStageCostInr,
   ledgerMonthKey,
+  normalizeHarvestCompanyEmployee,
+  normalizeHarvestPostAuthor,
   HARD_CAP_INR,
+  PER_RUN_MAX_USD,
 } from './_apify.js'
 
 const COLLECTION = 'lead_pipeline'
@@ -32,110 +35,59 @@ const RUNS_COLLECTION = 'pipeline_runs'
 const LEDGER_COLLECTION = 'pipeline_cost_ledger'
 
 // -------------------- Actor configs --------------------
-// Volumes match cmo.md §5. Adjust here when tuning. Keywords/filters are
-// "starter" — Sales Lead owns final tuning per cmo.md §9.
+// Three-stage pipeline post lead-pipeline-actor-rework:
+//   1) core-companies  — harvestapi/linkedin-company        (firmographics)
+//   2) core-employees  — harvestapi/linkedin-company-employees (Short tier)
+//   3) pulse-posts     — harvestapi/linkedin-post-search    (keyword search)
+//
+// The old pulse-profiles stage (supreme_coder/linkedin-profile-scraper) is
+// dropped: the post-search Actor returns `author.linkedinUrl` directly, so
+// Pulse leads land complete in stage 3. Volumes match cmo.md §5.
+//
+// `maxTotalChargeUsd` is set per-Actor as belt+suspenders against the monthly
+// ledger gate. harvestapi/linkedin-post-search REQUIRES it (HTTP 400 otherwise,
+// min $0.01 — RA §5.1). Sized to PER_RUN_MAX_USD in _apify.js so a single
+// misbehaving run cannot blow the monthly budget by itself.
 
 const CORE_COMPANY_ACTOR_INPUT = {
-  // bebity/linkedin-premium-actor — company firmographics
-  searchQueries: [
-    'site:linkedin.com/company SaaS US 50 employees',
-    'site:linkedin.com/company fintech UK 100 employees',
-    'site:linkedin.com/company software AU 200 employees',
+  // harvestapi/linkedin-company — keyword OR company URL seeds.
+  // Sales Lead refreshes the seed list per cmo.md §9.
+  searches: [
+    'SaaS 50 employees United States',
+    'fintech 100 employees United Kingdom',
+    'software 200 employees Australia',
   ],
   maxItems: 2000,
+  maxTotalChargeUsd: PER_RUN_MAX_USD['harvestapi/linkedin-company'],
 }
 
 const CORE_EMPLOYEE_ACTOR_INPUT = {
-  // harvestapi/linkedin-company-employees — Short tier (name + URL only)
-  // Companies list is seeded; Sales Lead refreshes via Apify console.
-  profileScraperMode: 'Short',
+  // harvestapi/linkedin-company-employees — Short tier (name + URL only).
+  // The literal enum value MUST include the price tag (RA §5 + research-001 §6.2).
+  // Old enum 'Short' is invalid post-rebuild and returns HTTP 400.
+  profileScraperMode: 'Short ($4 per 1k)',
   maxItems: 1200,
-  // companyUrls injected at runtime from a config doc; see TODO below.
+  maxTotalChargeUsd: PER_RUN_MAX_USD['harvestapi/linkedin-company-employees'],
+  // companies injected at runtime from a config doc; see TODO below.
 }
 
 const PULSE_POST_ACTOR_INPUT = {
-  // supreme_coder/linkedin-post
-  hashtags: ['buildinpublic', 'mvp', 'solofounder', 'needadeveloper', 'indiehackers'],
+  // harvestapi/linkedin-post-search — native keyword search.
+  // Tier-1 high-signal queries (RA §5). Sales Lead tunes after week 2.
+  searchQueries: [
+    'looking for technical cofounder',
+    'looking for tech cofounder',
+    'need a developer for my MVP',
+    'non-technical founder building',
+    'hiring CTO for early stage',
+    'looking for engineering partner',
+    'MVP no-code limitations',
+    'ready to launch my MVP',
+    '#buildinpublic looking for dev',
+    '#indiehackers cofounder wanted',
+  ],
   maxItems: 3000,
-}
-
-const PULSE_PROFILE_ACTOR_INPUT = {
-  // supreme_coder/linkedin-profile-scraper — enrich post authors
-  // profileUrls injected from prior actor's results in-process.
-  maxItems: 900,
-}
-
-// -------------------- Normalizers --------------------
-// Each actor returns differently-shaped items. Normalize into the schema in cmo.md §7.
-
-function normalizeCoreEmployee(raw) {
-  return {
-    source: 'apify-pipeline',
-    scraped_at: new Date(),
-    status: 'new',
-    person: {
-      first_name: raw.firstName || raw.first_name || '',
-      last_name: raw.lastName || raw.last_name || '',
-      linkedin_url: raw.profileUrl || raw.linkedinUrl || raw.url || '',
-      title: raw.title || raw.headline || '',
-      email: raw.email || null,
-      phone: raw.phone || null,
-    },
-    company: {
-      name: raw.companyName || raw.company || '',
-      linkedin_url: raw.companyUrl || null,
-      employee_count: raw.companySize || raw.employeeCount || null,
-      industry: raw.companyIndustry || raw.industry || null,
-      hq_country: raw.companyCountry || raw.country || null,
-      hq_city: raw.companyCity || raw.city || null,
-    },
-    signal: {
-      routing_signals: [],
-      post_content_snippet: null,
-      icp_score: 0,
-    },
-    apify: {
-      actor_id: 'harvestapi/linkedin-company-employees',
-      run_id: raw.__runId || '',
-      dataset_id: raw.__datasetId || '',
-    },
-    outreach: { sequence_step: 0, last_touch: null, reply_received: false },
-  }
-}
-
-function normalizePulsePostAuthor(raw) {
-  return {
-    source: 'apify-pipeline',
-    scraped_at: new Date(),
-    status: 'new',
-    person: {
-      first_name: raw.authorFirstName || (raw.authorName || '').split(' ')[0] || '',
-      last_name: raw.authorLastName || (raw.authorName || '').split(' ').slice(1).join(' ') || '',
-      linkedin_url: raw.authorProfileUrl || raw.profileUrl || '',
-      title: raw.authorHeadline || raw.headline || raw.title || '',
-      email: null,
-      phone: null,
-    },
-    company: {
-      name: raw.companyName || '',
-      linkedin_url: null,
-      employee_count: raw.companySize || null,
-      industry: raw.companyIndustry || null,
-      hq_country: raw.country || null,
-      hq_city: null,
-    },
-    signal: {
-      routing_signals: [],
-      post_content_snippet: (raw.postText || raw.text || '').slice(0, 500),
-      icp_score: 0,
-    },
-    apify: {
-      actor_id: 'supreme_coder/linkedin-post',
-      run_id: raw.__runId || '',
-      dataset_id: raw.__datasetId || '',
-    },
-    outreach: { sequence_step: 0, last_touch: null, reply_received: false },
-  }
+  maxTotalChargeUsd: PER_RUN_MAX_USD['harvestapi/linkedin-post-search'],
 }
 
 // -------------------- Run pipeline for one actor --------------------
@@ -166,7 +118,7 @@ async function runStage({ db, req, name, actorId, input, normalize, results }) {
     // Actor failure is non-fatal to the run; ledger state is unchanged.
     return { ledgerOk: true }
   }
-  const { items, runId, datasetId } = actorOut
+  const { items, runId, datasetId, usageTotalUsd } = actorOut
 
   let inserted = 0
   let skipped = 0
@@ -201,9 +153,20 @@ async function runStage({ db, req, name, actorId, input, normalize, results }) {
   // Cost accounting is load-bearing for the hard-cap guarantee. If we cannot
   // record what we just spent, the next stage would read a stale ledger and
   // potentially overrun the budget. Treat ledger failure as a hard stop.
+  //
+  // Ledger uses the measured `usageTotalUsd` from Apify when available
+  // (RA §6.5 option A — single source of truth). Falls back to the
+  // conservative projection (actorStart + expectedEvent × itemCount) if Apify
+  // didn't return a usage figure.
   try {
-    await recordActorCost(db, actorId, items.length)
-    results.stages.push({ name, actor: actorId, items: items.length, inserted, skipped, ok: true })
+    await recordActorCost(db, actorId, {
+      runUsageUsd: usageTotalUsd,
+      itemCount: items.length,
+    })
+    results.stages.push({
+      name, actor: actorId, items: items.length, inserted, skipped,
+      runUsageUsd: usageTotalUsd, ok: true,
+    })
     return { ledgerOk: true }
   } catch (err) {
     console.error(`[${name}] ledger write failed`, err?.message)
@@ -218,15 +181,25 @@ async function runStage({ db, req, name, actorId, input, normalize, results }) {
 
 // -------------------- Handler --------------------
 
-// All four stages in order, with the actor input + normalizer + the maxItems
-// used for the per-stage cost projection (B1 fix — pre-check budget before EACH
-// stage, not just at run start).
+// Three stages post lead-pipeline-actor-rework. The old pulse-profiles stage
+// is removed — harvestapi/linkedin-post-search returns author.linkedinUrl
+// inline (RA §6.4), so Pulse leads land complete in stage 3. The B1 per-stage
+// pre-check still gates each stage before it spends.
+//
+// `core-companies` uses the same employee normalizer surface for now — the
+// firmographic output (employeeCount/industry/locations) populates the
+// company sub-doc with no person attached. The downstream join happens when
+// stage 2's employees enrich against this companies pool. For v1 we emit a
+// company-only doc; Sales Lead's qualification reads it via
+// company.linkedin_url.
 const STAGES = [
   {
     name: 'core-companies',
-    actorId: 'bebity/linkedin-premium-actor',
+    actorId: 'harvestapi/linkedin-company',
     input: CORE_COMPANY_ACTOR_INPUT,
-    normalize: normalizeCoreEmployee,
+    // Company-only docs share the employee normalizer surface; person fields
+    // remain empty (cron skips empty linkedin_url → no Mongo upsert).
+    normalize: normalizeHarvestCompanyEmployee,
     maxItems: CORE_COMPANY_ACTOR_INPUT.maxItems,
     tier: 'core',
   },
@@ -234,24 +207,16 @@ const STAGES = [
     name: 'core-employees',
     actorId: 'harvestapi/linkedin-company-employees',
     input: CORE_EMPLOYEE_ACTOR_INPUT,
-    normalize: normalizeCoreEmployee,
+    normalize: normalizeHarvestCompanyEmployee,
     maxItems: CORE_EMPLOYEE_ACTOR_INPUT.maxItems,
     tier: 'core',
   },
   {
     name: 'pulse-posts',
-    actorId: 'supreme_coder/linkedin-post',
+    actorId: 'harvestapi/linkedin-post-search',
     input: PULSE_POST_ACTOR_INPUT,
-    normalize: normalizePulsePostAuthor,
+    normalize: normalizeHarvestPostAuthor,
     maxItems: PULSE_POST_ACTOR_INPUT.maxItems,
-    tier: 'pulse',
-  },
-  {
-    name: 'pulse-profiles',
-    actorId: 'supreme_coder/linkedin-profile-scraper',
-    input: PULSE_PROFILE_ACTOR_INPUT,
-    normalize: normalizePulsePostAuthor,
-    maxItems: PULSE_PROFILE_ACTOR_INPUT.maxItems,
     tier: 'pulse',
   },
 ]

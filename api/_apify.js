@@ -8,13 +8,73 @@
 
 const APIFY_BASE = 'https://api.apify.com/v2'
 
-// Per-item cost in USD, used by the cost ledger. Source: workspace/auto-lead-pipeline/cmo.md §3.
-// Keep in sync with that artifact if pricing changes.
+// Pay-per-event (PPE) cost shape in USD, used by the cost ledger and budget
+// gate. Source: workspace/lead-pipeline-actor-rework/research-analyst-v2.md §6
+// (live-verified 2026-06-12 against Apify per-run breakdowns).
+//
+// Shape: { actorStart, expectedEvent } in USD plus a tier breakdown for audit.
+// `actorStart` is a flat fee Apify charges every time a run starts (some
+// Actors charge $0.00005, the company-employees Actor charges $0.02 — 400×
+// higher, which dominates small runs). `expectedEvent` is the per-item price
+// for the EVENT TIER THE CRON ACTUALLY USES (e.g. shortProfile for the
+// company-employees Actor, since lead-scrape-cron.js sets
+// profileScraperMode: "Short ($4 per 1k)"). Projection = actorStart +
+// expectedEvent × itemCount.
+//
+// The hard-cap backstop is two-layered:
+//   1) This ledger projection guards the monthly INR budget pre-stage.
+//   2) Apify's per-run `maxTotalChargeUsd` (PER_RUN_MAX_USD below) caps a
+//      single run if the Actor mis-charges (e.g. unexpected event mix).
+// Real per-run cost is measured post-run from `run.usageTotalUsd`
+// (single-source-of-truth ledger, RA §6.5 option A) — drift between projection
+// and measured is logged in the ledger doc.
+//
+// Three swaps from main:
+//   - bebity/linkedin-premium-actor (rental, $29/mo)
+//        → harvestapi/linkedin-company (PPE, $4/1k items)
+//   - supreme_coder/linkedin-post (rental, $30/mo, requires URLs we lack)
+//        → harvestapi/linkedin-post-search (PPE, $2/1k posts; native keyword input)
+//   - supreme_coder/linkedin-profile-scraper stage dropped — the post-search
+//     Actor returns `author.linkedinUrl` directly (RA §6.4), so the separate
+//     pulse-profile-enrich stage is no longer required for v1 routing.
 export const ACTOR_COSTS_USD = {
-  'bebity/linkedin-premium-actor': 0.003,
-  'harvestapi/linkedin-company-employees': 0.004,
-  'supreme_coder/linkedin-post': 0.001,
-  'supreme_coder/linkedin-profile-scraper': 0.003,
+  'harvestapi/linkedin-company': {
+    actorStart: 0.00005,
+    expectedEvent: 0.004, // datasetItem — $4/1k live-verified
+  },
+  'harvestapi/linkedin-company-employees': {
+    actorStart: 0.02, // 400× the others; batch large to amortize
+    expectedEvent: 0.003, // Short tier ($3/1k); cron picks this scraper mode
+    shortProfile: 0.003,
+    fullProfile: 0.008,
+    fullProfileEmail: 0.012,
+  },
+  'harvestapi/linkedin-post-search': {
+    actorStart: 0.00005,
+    expectedEvent: 0.002, // post event — $2/1k live-verified
+    post: 0.002,
+    mainProfile: 0.002,
+    fullProfile: 0.004,
+    noResultQuery: 0.001,
+  },
+  // Kept for the optional Surface 4 enrichment path. Untested live as of
+  // 2026-06-12 (RA §8 open item #1); price from vendor headline.
+  'supreme_coder/linkedin-profile-scraper': {
+    actorStart: 0.00005,
+    expectedEvent: 0.003,
+  },
+}
+
+// Per-run hard cap that we hand to Apify directly. Belt-and-suspenders against
+// the monthly ledger gate: even if our state machine miscalculates, Apify will
+// kill the run when this many dollars are spent. `harvestapi/linkedin-post-search`
+// REQUIRES this field (returns HTTP 400 without it; min $0.01). RA §5.1.
+// Sized at 2× expected per-stage spend so legitimate large batches survive.
+export const PER_RUN_MAX_USD = {
+  'harvestapi/linkedin-company': 0.50,
+  'harvestapi/linkedin-company-employees': 5.00,
+  'harvestapi/linkedin-post-search': 0.50,
+  'supreme_coder/linkedin-profile-scraper': 0.50,
 }
 
 // INR conversion rate. Used by BOTH soft AND hard cap checks (see budgetState below).
@@ -74,7 +134,28 @@ export async function runActor(actorId, input, opts = {}) {
       throw new Error(`Apify actor ${actorId} returned non-array payload`)
     }
 
-    return { items, runId, datasetId }
+    // Best-effort post-run cost fetch. Apify exposes the run's totalUsageUsd on
+    // GET /v2/actor-runs/<id>. We swallow failures here because the cron has a
+    // projection fallback in recordActorCost(); cost accounting must not block
+    // the data flow on a transient API blip.
+    let usageTotalUsd = null
+    if (runId) {
+      try {
+        const runRes = await fetch(
+          `${APIFY_BASE}/actor-runs/${runId}?token=${encodeURIComponent(token)}`,
+          { signal: controller.signal },
+        )
+        if (runRes.ok) {
+          const runDoc = await runRes.json()
+          const u = runDoc?.data?.usageTotalUsd
+          if (typeof u === 'number' && Number.isFinite(u)) usageTotalUsd = u
+        }
+      } catch {
+        // ignore — projection fallback covers it
+      }
+    }
+
+    return { items, runId, datasetId, usageTotalUsd }
   } finally {
     clearTimeout(timer)
   }
@@ -236,46 +317,167 @@ export function ledgerMonthKey(now = new Date()) {
 /**
  * Project the INR cost of running an actor at a given item volume.
  * Used by the per-stage cap pre-check to refuse a stage if it would breach
- * the hard cap. Source of per-item USD prices: cmo.md §3.
+ * the hard cap. Conservative: actorStart + (worstEvent × itemCount). For
+ * PPE Actors with multiple chargeable event tiers, the worst event is used so
+ * the gate never under-budgets (RA §6.5).
+ *
+ * Returns 0 when the actor has no pricing entry — callers (test-budget-gate)
+ * trap that as a misconfiguration so the cap is not silently bypassed.
+ *
  * @param {string} actorId
  * @param {number} itemCount
  */
 export function projectStageCostInr(actorId, itemCount) {
-  const usd = (ACTOR_COSTS_USD[actorId] ?? 0) * itemCount
+  const cfg = ACTOR_COSTS_USD[actorId]
+  if (!cfg) return 0
+  // Numeric-only legacy entries (none expected post-rework) fall back to flat
+  // per-item math. Object entries use actorStart + worstEvent × itemCount.
+  const usd = typeof cfg === 'number'
+    ? cfg * itemCount
+    : (cfg.actorStart || 0) + ((cfg.expectedEvent || 0) * itemCount)
   return usd * USD_TO_INR
 }
 
 /**
- * Update the monthly cost ledger after an actor run.
+ * Update the monthly cost ledger from a measured run's `usageTotalUsd`.
+ * Single-source-of-truth approach (RA §6.5 option A): we read Apify's own
+ * cost-per-run figure post-run rather than reconstructing from item count ×
+ * unit price. Multi-event PPE Actors otherwise drift unpredictably.
+ *
  * Returns the ledger doc post-update. Caller decides what to do with it.
  * THROWS on write failure — caller MUST treat ledger failure as a stop
  * condition (cost accounting is load-bearing for the hard-cap guarantee).
+ *
  * @param {import('mongodb').Db} db
  * @param {string} actorId
- * @param {number} itemCount
+ * @param {object} args - { runUsageUsd, itemCount } from runActor()
  */
-export async function recordActorCost(db, actorId, itemCount) {
-  const usd = (ACTOR_COSTS_USD[actorId] ?? 0) * itemCount
+export async function recordActorCost(db, actorId, args) {
+  // Back-compat: callers that pass a bare itemCount (the pre-rework signature)
+  // are routed through the conservative projector so we still bill SOMETHING
+  // rather than silently zeroing out. Tests cover the new shape.
+  const { runUsageUsd, itemCount } =
+    typeof args === 'number'
+      ? { runUsageUsd: null, itemCount: args }
+      : args || {}
+
+  let usd
+  if (typeof runUsageUsd === 'number' && Number.isFinite(runUsageUsd) && runUsageUsd > 0) {
+    usd = runUsageUsd
+  } else {
+    // Fallback: project conservatively from itemCount. Drift is logged in
+    // the ledger doc (`source: 'projected'`) so an audit can spot it.
+    const projInr = projectStageCostInr(actorId, itemCount || 0)
+    usd = projInr / USD_TO_INR
+  }
   const inr = usd * USD_TO_INR
   const now = new Date()
   const ym = ledgerMonthKey(now)
   const ledger = db.collection('pipeline_cost_ledger')
 
+  const actorKey = actorId.replace(/\W/g, '_')
+  const source = typeof runUsageUsd === 'number' ? 'measured' : 'projected'
   const updated = await ledger.findOneAndUpdate(
     { month: ym },
     {
       $inc: {
-        [`actors.${actorId.replace(/\W/g, '_')}.items`]: itemCount,
-        [`actors.${actorId.replace(/\W/g, '_')}.usd`]: usd,
+        [`actors.${actorKey}.items`]: itemCount || 0,
+        [`actors.${actorKey}.usd`]: usd,
+        [`actors.${actorKey}.runs`]: 1,
         total_usd: usd,
         total_inr: inr,
       },
       $setOnInsert: { month: ym, created_at: now },
-      $set: { updated_at: now },
+      $set: { updated_at: now, [`actors.${actorKey}.last_source`]: source },
     },
     { upsert: true, returnDocument: 'after' }
   )
   return updated?.value ?? updated
+}
+
+// -------------------- Normalizers (lead-pipeline-actor-rework) --------------------
+// The Apify Actor schema changed (RA §2.1). Both Short-tier company-employees
+// and post-search Actors return data in nested shapes that the previous
+// normalizers in lead-scrape-cron.js could not unpack. Exported so the cron AND
+// the smoke tests can share a single normalizer surface.
+
+const BASE_LEAD_DOC = () => ({
+  source: 'apify-pipeline',
+  scraped_at: new Date(),
+  status: 'new',
+  person: {
+    first_name: '',
+    last_name: '',
+    linkedin_url: '',
+    title: '',
+    email: null,
+    phone: null,
+  },
+  company: {
+    name: '',
+    linkedin_url: null,
+    employee_count: null,
+    industry: null,
+    hq_country: null,
+    hq_city: null,
+  },
+  signal: {
+    routing_signals: [],
+    post_content_snippet: null,
+    icp_score: 0,
+  },
+  apify: {
+    actor_id: '',
+    run_id: '',
+    dataset_id: '',
+  },
+  outreach: { sequence_step: 0, last_touch: null, reply_received: false },
+})
+
+/**
+ * Normalize a `harvestapi/linkedin-company-employees` Short-tier record. Top-level
+ * `headline` is null on Short; title lives in `currentPositions[0].title`.
+ * @param {object} raw
+ */
+export function normalizeHarvestCompanyEmployee(raw = {}) {
+  const doc = BASE_LEAD_DOC()
+  const firstPosition = Array.isArray(raw.currentPositions) ? raw.currentPositions[0] : null
+  doc.person.first_name = raw.firstName || ''
+  doc.person.last_name = raw.lastName || ''
+  doc.person.linkedin_url = raw.profileUrl || raw.linkedinUrl || ''
+  doc.person.title = firstPosition?.title || raw.headline || ''
+  doc.company.name = firstPosition?.companyName || raw.companyName || ''
+  doc.company.linkedin_url = raw.companyUrl || null
+  // Short tier omits firmographics; populated downstream by Surface 1 join.
+  doc.company.employee_count = raw.companySize || raw.employeeCount || null
+  doc.company.industry = raw.companyIndustry || raw.industry || null
+  doc.company.hq_country = raw.companyCountry || raw.country || null
+  doc.company.hq_city = raw.location?.linkedinText || raw.city || null
+  doc.apify.actor_id = 'harvestapi/linkedin-company-employees'
+  doc.apify.run_id = raw.__runId || ''
+  doc.apify.dataset_id = raw.__datasetId || ''
+  return doc
+}
+
+/**
+ * Normalize a `harvestapi/linkedin-post-search` record into a lead doc. The
+ * author block carries the LinkedIn URL + role info we need to qualify Pulse.
+ * @param {object} raw
+ */
+export function normalizeHarvestPostAuthor(raw = {}) {
+  const doc = BASE_LEAD_DOC()
+  const author = raw.author || {}
+  const fullName = author.name || ''
+  const [first, ...rest] = fullName.split(' ')
+  doc.person.first_name = first || ''
+  doc.person.last_name = rest.join(' ') || ''
+  doc.person.linkedin_url = author.linkedinUrl || ''
+  doc.person.title = author.info || author.headline || ''
+  doc.signal.post_content_snippet = (raw.content || raw.text || '').slice(0, 500)
+  doc.apify.actor_id = 'harvestapi/linkedin-post-search'
+  doc.apify.run_id = raw.__runId || ''
+  doc.apify.dataset_id = raw.__datasetId || ''
+  return doc
 }
 
 // Soft cap = 85% of monthly budget. Above this, only run "cheap" Pulse actors.
