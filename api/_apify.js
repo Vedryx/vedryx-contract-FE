@@ -71,9 +71,9 @@ export const ACTOR_COSTS_USD = {
 // REQUIRES this field (returns HTTP 400 without it; min $0.01). RA §5.1.
 // Sized at 2× expected per-stage spend so legitimate large batches survive.
 export const PER_RUN_MAX_USD = {
-  'harvestapi/linkedin-company': 0.50,
+  'harvestapi/linkedin-company': 16.00,
   'harvestapi/linkedin-company-employees': 5.00,
-  'harvestapi/linkedin-post-search': 0.50,
+  'harvestapi/linkedin-post-search': 12.00,
   'supreme_coder/linkedin-profile-scraper': 0.50,
 }
 
