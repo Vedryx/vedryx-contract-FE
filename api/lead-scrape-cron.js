@@ -116,30 +116,26 @@ const CORE_EMPLOYEE_ACTOR_INPUT = {
   // (items.type: "string"). Integer arrays trigger silent per-stage 400s.
   seniorityLevelIds: ['120', '130', '220', '300', '310'], // Senior / Strategic / Director / VP / CXO
   functionIds: ['8', '12'],                                // Engineering + HR
-  jobTitles: [
-    'Head of Engineering', 'VP Engineering', 'VP of Engineering',
-    'CTO', 'Engineering Manager', 'Director of Engineering',
-    'VP Talent', 'HR Director', 'Technical Recruiter',
-  ],
-  locations: [
-    'United States', 'United Kingdom', 'Australia',
-    'Germany', 'Netherlands', 'France', 'Sweden', 'Ireland',
-    'United Arab Emirates', 'Saudi Arabia', 'India',
-  ],
-  // companyHeadcount intentionally OMITTED (2026-06-12, fix/employees-headcount-band):
-  // seed URLs are explicitly curated upstream by Sales Lead against the
-  // seed-list rubric (RA §4: headcount 51-500). Re-filtering by harvestapi's
-  // band enum here is redundant and costs leads — band C (51-200) holds the
-  // bulk of curated seeds and was being silently excluded by the prior
-  // ['D','E'] filter (run Vb6LZkh4EqRlR0Ka9 returned 0 across 11 seeds).
-  // The seed-list rubric is now the company-quality gate.
+  // jobTitles intentionally OMITTED (2026-06-12, fix/employee-actor-filters-loosen):
+  // harvestapi AND-combines filter fields. With seniorityLevelIds + functionIds
+  // + jobTitles all enforced, the intersection collapsed to 0 on run
+  // Vb6LZkh4EqRlR0Ka9 (11 seeds, 0 employees). Founder choice: keep seniority +
+  // function as the Actor-side gate; let CORE_TITLE_PATTERNS in _apify.js do
+  // post-fetch title scoring. Costs a bit more per matched profile but yields
+  // a non-empty set we can classify.
+  //
+  // locations intentionally OMITTED (2026-06-12, fix/employee-actor-filters-loosen):
+  // seed URLs already vetted by Sales Lead for region (RA §4 rubric). Filtering
+  // at Actor by employee location tag is redundant AND over-restrictive — senior
+  // employees of US-HQ companies often sit in non-listed countries and were
+  // wrongly dropped. Downstream sales motion handles region preference.
   // Verified against harvestapi CSV 2026-06-12:
   //   4  = Software Development
   //   6  = Technology, Information and Internet
-  //   96 = IT Services and IT Consulting
-  //   43 = Financial Services
-  // Source: github.com/HarvestAPI/linkedin-industry-codes-v2
-  industryIds: ['4', '6', '96', '43'],
+  // Trimmed 2026-06-12 (fix/employee-actor-filters-loosen): dropped 96 (IT
+  // Services & IT Consulting) and 43 (Financial Services) — founder prefers
+  // product companies only. Source: github.com/HarvestAPI/linkedin-industry-codes-v2
+  industryIds: ['4', '6'],
   // companies injected at runtime from getSeedBatch() — same seed set as core-companies.
 }
 
@@ -405,7 +401,13 @@ export default async function handler(req, res) {
     // (firmographic) and employees (people in those companies). Pulling once
     // and reusing keeps the batch consistent across the two stages and
     // avoids double-rotating the seed pool.
-    const seedUrls = await getSeedBatch(db, 30)
+    //
+    // Cap at 10 (2026-06-12, fix/employee-actor-filters-loosen):
+    // harvestapi/linkedin-company-employees in all_at_once mode has a hard
+    // limit of 10 companies per run. Run Vb6LZkh4EqRlR0Ka9 sent 11; the 11th
+    // (Workstream) was silently dropped. Aligning batch size to the Actor's
+    // ceiling prevents that drop.
+    const seedUrls = await getSeedBatch(db, 10)
     results.seedUrlsCount = seedUrls.length
     if (seedUrls.length === 0) {
       console.warn('[lead-scrape-cron] core_seed_companies empty — Core stages will be skipped. Sales Lead must seed before Core pipeline runs.')
