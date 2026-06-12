@@ -86,7 +86,17 @@ const PULSE_POST_ACTOR_INPUT = {
     '#buildinpublic looking for dev',
     '#indiehackers cofounder wanted',
   ],
-  maxItems: 3000,
+  // Throttle (2026-06-12, fix/pulse-posts-throttle):
+  //   - `postedLimit: '24h'` is the Actor's canonical time-window enum
+  //     (confirmed against apify.com/harvestapi/linkedin-post-search input
+  //     schema). Without this, every nightly run refetches every matching
+  //     post in the Actor's default window — manual re-trigger pulled 902
+  //     items at ₹179.34, which projects to ₹5400/month vs the ₹2000 ceiling.
+  //   - `maxItems: 40` is a hard cap. 40 × $2/1k + $0.00005 actor-start ≈ $0.08
+  //     ≈ ₹7.68/run. Keeps total run cost ~₹15-25 and monthly ~₹450-750,
+  //     well under HARD_CAP_INR with headroom for keyword expansion.
+  postedLimit: '24h',
+  maxItems: 40,
   maxTotalChargeUsd: PER_RUN_MAX_USD['harvestapi/linkedin-post-search'],
 }
 

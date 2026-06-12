@@ -19,7 +19,10 @@ import {
 const STAGES = [
   { name: 'core-companies', actorId: 'harvestapi/linkedin-company', maxItems: 2000 },
   { name: 'core-employees', actorId: 'harvestapi/linkedin-company-employees', maxItems: 1200 },
-  { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 3000 },
+  // pulse-posts throttled to 40 items + 24h window — see api/lead-scrape-cron.js
+  // PULSE_POST_ACTOR_INPUT comment. Old value (3000) reflected the unfiltered
+  // Actor default before the 2026-06-12 throttle fix.
+  { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 40 },
 ]
 
 function simulate(startingLedgerInr, label) {
