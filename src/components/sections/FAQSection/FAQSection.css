@@ -1,0 +1,335 @@
+/* ============================================================
+   VEDRYX CORE — FAQSection
+   Ported from workspace/.../contract-faq/index-v2.html (motion v2).
+   Markup and copy from data/landingContent.js (single source of
+   truth for FAQPage JSON-LD as well).
+   Motion language matches the site (usePageMotion + brand bezier).
+   No framer-motion; expand/collapse uses WAAPI in the JSX.
+   All visual rules namespaced under .vdx-faq.
+   ============================================================ */
+
+.vdx-faq {
+  /* Local ease alias so the same token name from the preview keeps working. */
+  --vdx-ease: cubic-bezier(.2,.7,.2,1);
+
+  position: relative;
+  z-index: 2;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+}
+
+.vdx-faq__wrap {
+  width: 100%;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  position: relative;
+  z-index: 2;
+}
+
+.vdx-faq__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: clamp(32px, 6vw, 96px);
+  align-items: end;
+  margin-bottom: clamp(40px, 6vw, 72px);
+}
+
+.vdx-faq__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  margin-bottom: 18px;
+}
+.vdx-faq__eyebrow::before {
+  content: '';
+  width: 26px; height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+
+.vdx-faq__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+.vdx-faq__title em {
+  font-style: normal;
+  background: linear-gradient(180deg, #aebfff 0%, #6d8bff 70%, #46d9ff 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.vdx-faq__lead {
+  font-size: clamp(16px, 1.4vw, 19px);
+  color: var(--muted);
+  max-width: 48ch;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* List of FAQs */
+.vdx-faq__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.vdx-faq__item {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  transition: background .45s var(--vdx-ease);
+}
+.vdx-faq__item[open] {
+  background: linear-gradient(180deg, rgba(109,139,255,0.04), rgba(109,139,255,0));
+}
+
+/* Open-state accent bar — 2px gradient, scales in from top.
+   With JS: bar tracks .is-open (synced to the WAAPI height anim).
+   Without JS: bar tracks native [open]. */
+.vdx-faq__item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 26px;
+  bottom: 26px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  transform: scaleY(0);
+  transform-origin: top;
+  opacity: 0;
+  transition: transform .5s var(--vdx-ease), opacity .3s ease;
+  pointer-events: none;
+}
+body.anim .vdx-faq__item.is-open::before { transform: scaleY(1); opacity: 1; }
+body:not(.anim) .vdx-faq__item[open]::before { transform: scaleY(1); opacity: 1; }
+
+/* The clickable row */
+.vdx-faq__summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 44px 1fr 28px;
+  align-items: center;
+  gap: clamp(12px, 2vw, 24px);
+  padding: clamp(22px, 2.6vw, 30px) 4px;
+  font-family: var(--font-display);
+  font-size: clamp(17px, 1.5vw, 21px);
+  font-weight: 500;
+  letter-spacing: -0.018em;
+  line-height: 1.35;
+  color: var(--text);
+  transition: color .25s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.vdx-faq__summary::-webkit-details-marker { display: none; }
+.vdx-faq__summary::marker { content: ''; }
+.vdx-faq__summary:hover { color: #fff; }
+.vdx-faq__summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.vdx-faq__num {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--faint);
+  letter-spacing: 0.06em;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  transition: color .3s ease;
+}
+.vdx-faq__item[open] .vdx-faq__num { color: var(--accent-ink); }
+.vdx-faq__summary:hover .vdx-faq__num { color: var(--muted); }
+
+/* Question nudges right on hover */
+.vdx-faq__q {
+  display: block;
+  transition: transform .35s var(--vdx-ease);
+}
+.vdx-faq__summary:hover .vdx-faq__q { transform: translateX(4px); }
+
+/* Plus/minus indicator — whole icon spins 180° on open */
+.vdx-faq__icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  justify-self: end;
+  color: var(--muted);
+  transition: color .25s ease, transform .45s var(--vdx-ease);
+}
+.vdx-faq__icon::before,
+.vdx-faq__icon::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  background: currentColor;
+  transition: transform .45s var(--vdx-ease), opacity .3s ease;
+}
+.vdx-faq__icon::before {
+  width: 14px; height: 1.5px;
+  transform: translate(-50%, -50%);
+}
+.vdx-faq__icon::after {
+  width: 1.5px; height: 14px;
+  transform: translate(-50%, -50%);
+}
+.vdx-faq__item:not([open]) .vdx-faq__summary:hover .vdx-faq__icon {
+  color: var(--text);
+  transform: scale(1.12);
+}
+.vdx-faq__item[open] .vdx-faq__icon {
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+.vdx-faq__item[open] .vdx-faq__icon::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+  opacity: 0;
+}
+
+/* Answer body */
+.vdx-faq__answer {
+  padding: 0 4px clamp(28px, 3vw, 36px) calc(44px + clamp(12px, 2vw, 24px));
+  color: var(--muted);
+  font-size: clamp(15.5px, 1.18vw, 17px);
+  line-height: 1.65;
+  max-width: 78ch;
+}
+.vdx-faq__answer p { margin: 0; }
+.vdx-faq__answer strong { color: var(--text); font-weight: 600; }
+
+/* Answer text fades + rises after the container starts expanding.
+   Gated behind body.anim — without JS the answer is always visible. */
+body.anim .vdx-faq__answer p {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .35s ease .12s, transform .45s var(--vdx-ease) .12s;
+}
+body.anim .vdx-faq__item.is-open .vdx-faq__answer p {
+  opacity: 1;
+  transform: none;
+}
+
+/* Footer / soft CTA under the list */
+.vdx-faq__foot {
+  margin-top: clamp(40px, 5vw, 64px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: clamp(22px, 2.4vw, 28px) clamp(22px, 2.4vw, 32px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  backdrop-filter: blur(8px);
+}
+.vdx-faq__foot-copy {
+  font-size: 16px;
+  color: var(--muted);
+  margin: 0;
+  max-width: 56ch;
+}
+.vdx-faq__foot-copy strong { color: var(--text); font-weight: 600; }
+
+/* Tablet */
+@media (max-width: 960px) {
+  .vdx-faq__head {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  .vdx-faq__lead { max-width: 60ch; }
+}
+
+/* Mobile */
+@media (max-width: 560px) {
+  .vdx-faq__summary {
+    grid-template-columns: 28px 1fr 22px;
+    gap: 12px;
+    padding: 20px 2px;
+    font-size: 16.5px;
+  }
+  .vdx-faq__num { font-size: 12px; }
+  .vdx-faq__icon { width: 18px; height: 18px; }
+  .vdx-faq__icon::before { width: 12px; }
+  .vdx-faq__icon::after { height: 12px; }
+  .vdx-faq__answer {
+    padding-left: calc(28px + 12px);
+    padding-right: 2px;
+    padding-bottom: 24px;
+    font-size: 15.5px;
+  }
+  .vdx-faq__foot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vdx-faq * { transition: none !important; animation: none !important; }
+}
+
+/* Desktop ≥1025px — split layout: sticky header rail left, accordion right.
+   Fixes the dead zone right of answer prose and tightens vertical scale.
+   ≤1024px (tablet) and ≤560px (mobile) are intentionally untouched. */
+@media (min-width: 1025px) {
+  /* Vertical tier: drop from hero tier (82–132px) to product tier. */
+  .vdx-faq.section-pad {
+    padding: clamp(72px, 9vh, 112px) 0;
+  }
+
+  /* Two-column shell: header rail | accordion. */
+  .vdx-faq__wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    column-gap: clamp(48px, 6vw, 96px);
+    align-items: start;
+  }
+
+  /* Header: stack title above lead (was side-by-side), pin as rail. */
+  .vdx-faq__head {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    align-items: start;
+    margin-bottom: 0;
+    position: sticky;
+    top: clamp(96px, 12vh, 128px);
+  }
+
+  .vdx-faq__lead {
+    max-width: 42ch;
+  }
+
+  /* Accordion column: prevent grid blowout from long unbroken strings. */
+  .vdx-faq__list {
+    min-width: 0;
+  }
+
+  /* Answers now fill their column (~66ch) — release the wide-row cap. */
+  .vdx-faq__answer {
+    max-width: none;
+  }
+
+  /* CTA band keeps full-width weight under both columns. */
+  .vdx-faq__foot {
+    grid-column: 1 / -1;
+    margin-top: clamp(40px, 5vw, 56px);
+  }
+}
