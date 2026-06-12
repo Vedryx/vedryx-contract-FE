@@ -80,6 +80,32 @@ const cases = [
     },
     expect: 'core',
   },
+  {
+    // QA adversarial case (B-flag in qa-review.md):
+    // Co-Founder & CTO at an 8-person startup with an MVP signal previously
+    // returned `pulse` because pulseHits (title+tiny+post = 3) tripped before
+    // coreHits reached 3 (title alone scores 2; emp-band/industry/geo missed).
+    // Conflict-first rule per cmo.md §6 line 188 must route this to `core`.
+    name: 'conflict-at-small-co → core: Co-Founder & CTO at 8-person startup, MVP post signal',
+    lead: {
+      person: { title: 'Co-Founder & CTO' },
+      company: { employee_count: 8 },
+      signal: { post_content_snippet: 'building our MVP, prepping launch' },
+    },
+    expect: 'core',
+  },
+  {
+    // Guards against the "loose substring" regression — "happy", "rapper",
+    // "application" must NOT trip the post signal. Lone Founder, tiny co,
+    // no actual MVP/dev keyword → no pulse signal → disqualified.
+    name: 'word-boundary regex: "happy" / "rapper" must not trip pulse:post-signal',
+    lead: {
+      person: { title: 'Founder' },
+      company: { employee_count: 1 },
+      signal: { post_content_snippet: 'i am happy our rapper friend dropped an album' },
+    },
+    expect: 'disqualified',
+  },
 ]
 
 let failures = 0

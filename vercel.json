@@ -59,6 +59,11 @@
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/lead-scrape-cron.js": {
+      "maxDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/lead-scrape-cron",

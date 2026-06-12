@@ -17,8 +17,18 @@ export const ACTOR_COSTS_USD = {
   'supreme_coder/linkedin-profile-scraper': 0.003,
 }
 
-// INR conversion rate. Conservative — used only for the soft cap alarm.
-export const USD_TO_INR = 83
+// INR conversion rate. Used by BOTH soft AND hard cap checks (see budgetState below).
+// Overridable via USD_TO_INR env var so we don't ship code edits to track FX drift.
+// Default 83 is conservative as of mid-2026; widen the budget headroom rather than
+// shrinking the rate if INR weakens materially.
+export const USD_TO_INR = (() => {
+  const raw = process.env.USD_TO_INR
+  if (!raw) return 83
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return 83
+  // Floor at 80 to prevent a misconfigured low rate from understating real spend.
+  return Math.max(n, 80)
+})()
 
 export function getApifyToken() {
   const token = process.env.APIFY_TOKEN
@@ -92,9 +102,22 @@ const PULSE_TITLE_PATTERNS = [
   /indie maker/i,
 ]
 
+// Word-boundary regex list. Substring matches over-classified Pulse
+// (e.g. 'app' matched 'happy', 'rapper', 'application'). All patterns use
+// \b boundaries or explicit phrase matches. Case-insensitive.
 const PULSE_POST_SIGNALS = [
-  'building', 'mvp', 'idea', 'launch', 'need developer',
-  'technical co-founder', ' dev ', 'app', 'startup',
+  /\bbuilding\b/i,
+  /\bmvp\b/i,
+  /\bidea\b/i,
+  /\blaunch(?:ing|ed)?\b/i,
+  /\bneed (?:a )?developer\b/i,
+  /\btechnical co-?founder\b/i,
+  /\bdev(?:eloper)?s?\b/i,
+  /\bapp\b/i,
+  /\bstartup\b/i,
+  /\bbuild ?in ?public\b/i,
+  /\bsolo ?founder\b/i,
+  /\bindie ?(?:hacker|maker)\b/i,
 ]
 
 const CORE_COUNTRY_ALLOW = new Set([
@@ -159,14 +182,26 @@ export function classifyLead(lead) {
     matched.push('pulse:tiny-company')
     pulseHits += 1
   }
-  const pulsePostHit = PULSE_POST_SIGNALS.some((kw) => postSnippet.includes(kw))
+  const pulsePostHit = PULSE_POST_SIGNALS.some((re) => re.test(postSnippet))
   if (pulsePostHit) {
     matched.push('pulse:post-signal')
     pulseHits += 1
   }
 
   // ---- Decide ----
-  // Conflict rule per cmo.md §6: both signals present → core (higher LTV).
+  // Conflict rule per cmo.md §6 line 188: when BOTH Core and Pulse signals are
+  // present, route to core (higher LTV). This rule must be evaluated BEFORE
+  // the pulseHits === 3 check, because at small companies (<20 emp) a CTO/Founder
+  // with an MVP post can hit pulseHits=3 (title+tiny+post) before coreHits
+  // reaches 3 (title alone scores 2; emp-band/industry/geo may all miss).
+  // Without this gate, a hands-on CTO at an 8-person startup would silently
+  // land in Pulse and get indie-maker outreach.
+  const hasCoreSignal = coreHits >= 2 // title-pattern alone scores 2
+  const hasPulseSignal = pulseHits >= 1
+  if (hasCoreSignal && hasPulseSignal) {
+    matched.push('conflict:resolved-to-core')
+    return { icp: 'core', score: Math.min(1, Math.max(coreHits, 3) / 5), matched }
+  }
   if (coreHits >= 3) {
     return { icp: 'core', score: Math.min(1, coreHits / 5), matched }
   }
@@ -179,8 +214,42 @@ export function classifyLead(lead) {
 // -------------------- Cost ledger --------------------
 
 /**
+ * Return the current ledger key in IST (Asia/Kolkata) — "YYYY-MM".
+ * Founder's budget mental model is IST. The cron fires 20:30 UTC = 02:00 IST,
+ * so anchoring the key to UTC would drift the monthly reset by 5.5 hours and
+ * mis-attribute the first/last few runs of each month. Anchored to IST instead.
+ * @param {Date} [now]
+ */
+export function ledgerMonthKey(now = new Date()) {
+  // Intl with timeZone gives us the IST-correct year/month regardless of host TZ.
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+  })
+  const parts = fmt.formatToParts(now)
+  const year = parts.find((p) => p.type === 'year')?.value || ''
+  const month = parts.find((p) => p.type === 'month')?.value || ''
+  return `${year}-${month}`
+}
+
+/**
+ * Project the INR cost of running an actor at a given item volume.
+ * Used by the per-stage cap pre-check to refuse a stage if it would breach
+ * the hard cap. Source of per-item USD prices: cmo.md §3.
+ * @param {string} actorId
+ * @param {number} itemCount
+ */
+export function projectStageCostInr(actorId, itemCount) {
+  const usd = (ACTOR_COSTS_USD[actorId] ?? 0) * itemCount
+  return usd * USD_TO_INR
+}
+
+/**
  * Update the monthly cost ledger after an actor run.
  * Returns the ledger doc post-update. Caller decides what to do with it.
+ * THROWS on write failure — caller MUST treat ledger failure as a stop
+ * condition (cost accounting is load-bearing for the hard-cap guarantee).
  * @param {import('mongodb').Db} db
  * @param {string} actorId
  * @param {number} itemCount
@@ -189,7 +258,7 @@ export async function recordActorCost(db, actorId, itemCount) {
   const usd = (ACTOR_COSTS_USD[actorId] ?? 0) * itemCount
   const inr = usd * USD_TO_INR
   const now = new Date()
-  const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+  const ym = ledgerMonthKey(now)
   const ledger = db.collection('pipeline_cost_ledger')
 
   const updated = await ledger.findOneAndUpdate(
