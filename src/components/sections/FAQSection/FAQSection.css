@@ -285,3 +285,51 @@ body.anim .vdx-faq__item.is-open .vdx-faq__answer p {
 @media (prefers-reduced-motion: reduce) {
   .vdx-faq * { transition: none !important; animation: none !important; }
 }
+
+/* Desktop ≥1025px — split layout: sticky header rail left, accordion right.
+   Fixes the dead zone right of answer prose and tightens vertical scale.
+   ≤1024px (tablet) and ≤560px (mobile) are intentionally untouched. */
+@media (min-width: 1025px) {
+  /* Vertical tier: drop from hero tier (82–132px) to product tier. */
+  .vdx-faq.section-pad {
+    padding: clamp(72px, 9vh, 112px) 0;
+  }
+
+  /* Two-column shell: header rail | accordion. */
+  .vdx-faq__wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    column-gap: clamp(48px, 6vw, 96px);
+    align-items: start;
+  }
+
+  /* Header: stack title above lead (was side-by-side), pin as rail. */
+  .vdx-faq__head {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    align-items: start;
+    margin-bottom: 0;
+    position: sticky;
+    top: clamp(96px, 12vh, 128px);
+  }
+
+  .vdx-faq__lead {
+    max-width: 42ch;
+  }
+
+  /* Accordion column: prevent grid blowout from long unbroken strings. */
+  .vdx-faq__list {
+    min-width: 0;
+  }
+
+  /* Answers now fill their column (~66ch) — release the wide-row cap. */
+  .vdx-faq__answer {
+    max-width: none;
+  }
+
+  /* CTA band keeps full-width weight under both columns. */
+  .vdx-faq__foot {
+    grid-column: 1 / -1;
+    margin-top: clamp(40px, 5vw, 56px);
+  }
+}
