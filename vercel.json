@@ -58,5 +58,11 @@
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/lead-scrape-cron",
+      "schedule": "30 20 * * *"
+    }
   ]
 }
