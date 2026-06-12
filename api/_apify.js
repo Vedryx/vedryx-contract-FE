@@ -522,6 +522,21 @@ export function ledgerMonthKey(now = new Date()) {
 }
 
 /**
+ * True when `now` falls on a Monday in IST. Used by lead-scrape-cron to
+ * noop-skip the Monday-IST run so the telecaller's day off isn't flooded.
+ * Vercel cron is scheduled `30 20 * * *` UTC (daily) because Hobby tier
+ * day-of-week filters are flaky; the skip lives in code instead.
+ * @param {Date} [now]
+ */
+export function isMondayIST(now = new Date()) {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+  })
+  return fmt.format(now) === 'Mon'
+}
+
+/**
  * Project the INR cost of running an actor at a given item volume.
  * Used by the per-stage cap pre-check to refuse a stage if it would breach
  * the hard cap. Conservative: actorStart + (worstEvent × itemCount). For
