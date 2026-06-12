@@ -181,25 +181,64 @@ const PULSE_POST_ACTOR_INPUT = {
  * Ledger failures DO stop the run.
  */
 // Per-actor wall-clock budget. Vercel Hobby caps the whole function at 300s.
-// Four serial stages at 60s each = 240s, leaving ~60s for DB upserts and the
-// per-stage budget gate. If an actor exceeds this, it's caught as a stage
-// failure and the run continues (per CMO spec).
-const PER_ACTOR_TIMEOUT_MS = 60_000
+// Sized PER STAGE because the three actors have different runtime profiles
+// (live-measured 2026-06-12 against the dev_for_vedryx Apify account):
+//   - linkedin-company:           1–9s for 30 seeds (firmographic lookup, fast)
+//   - linkedin-company-employees: 1–3s for empty seed input; ~30–60s for 30 seeds
+//   - linkedin-post-search:       60–80s for 50 items across 5 queries
+//
+// The previous flat 60s cap was triggering an AbortController abort on
+// pulse-posts even when Apify's run succeeded server-side in 76s — we lost the
+// dataset AND paid the actor cost (Apify keeps charging after our fetch aborts).
+// Per-stage budgets total ≤ 230s, leaving ≥ 70s for DB upserts + budget gate
+// under Vercel Hobby's 300s function cap.
+const STAGE_TIMEOUT_MS = {
+  'core-companies': 60_000,
+  'core-employees': 90_000,
+  'pulse-posts': 120_000,
+}
+const DEFAULT_STAGE_TIMEOUT_MS = 60_000
+
+// Friendly error mapper for the most common Apify 4xx failures. Surfaces
+// actionable next-steps in the run doc + Sentry without losing the raw error.
+function classifyActorError(message = '') {
+  const m = String(message)
+  if (/full-permission-actor-not-approved/i.test(m)) {
+    return {
+      kind: 'permissions-not-approved',
+      action: 'Founder: open the Actor in the Apify console while logged in as the token-owning user, click "Approve permissions". The approval URL is in the error message.',
+    }
+  }
+  if (/invalid-input/i.test(m) || /returned 400/.test(m)) {
+    return { kind: 'invalid-input', action: 'Check Actor input schema for breaking changes.' }
+  }
+  if (/operation was aborted/i.test(m)) {
+    return { kind: 'client-timeout', action: 'Stage timeout exceeded; consider raising STAGE_TIMEOUT_MS for this stage.' }
+  }
+  return { kind: 'unknown', action: null }
+}
 
 async function runStage({ db, req, name, actorId, input, normalize, maxItems, results }) {
   let actorOut
+  const timeoutMs = STAGE_TIMEOUT_MS[name] ?? DEFAULT_STAGE_TIMEOUT_MS
   try {
     actorOut = await runActor(actorId, input, {
-      timeoutMs: PER_ACTOR_TIMEOUT_MS,
+      timeoutMs,
       // Forward `maxItems` to Apify's URL query param — this is the AUTHORITATIVE
       // per-run cap. PR #28 set `maxItems` in the input body and still saw 669
       // items because the body field is ignored on the sync endpoint.
       maxItems,
     })
   } catch (err) {
-    console.error(`[${name}] actor failed`, err?.message)
-    await captureRouteError(req, err, { stage: name, actor: actorId })
-    results.stages.push({ name, actor: actorId, ok: false, error: String(err?.message || err) })
+    const errMsg = String(err?.message || err)
+    const { kind, action } = classifyActorError(errMsg)
+    console.error(`[${name}] actor failed (${kind})`, errMsg)
+    await captureRouteError(req, err, { stage: name, actor: actorId, errorKind: kind })
+    results.stages.push({
+      name, actor: actorId, ok: false, error: errMsg,
+      errorKind: kind,
+      ...(action ? { recommendedAction: action } : {}),
+    })
     // Actor failure is non-fatal to the run; ledger state is unchanged.
     return { ledgerOk: true }
   }
@@ -362,6 +401,9 @@ export default async function handler(req, res) {
     // avoids double-rotating the seed pool.
     const seedUrls = await getSeedBatch(db, 30)
     results.seedUrlsCount = seedUrls.length
+    if (seedUrls.length === 0) {
+      console.warn('[lead-scrape-cron] core_seed_companies empty — Core stages will be skipped. Sales Lead must seed before Core pipeline runs.')
+    }
     CORE_COMPANY_ACTOR_INPUT.companies = seedUrls
     CORE_EMPLOYEE_ACTOR_INPUT.companies = seedUrls
 
@@ -399,6 +441,15 @@ export default async function handler(req, res) {
       // Tier filter: under soft-cap, skip Core stages.
       if (state === 'soft-cap' && stage.tier === 'core') {
         results.skippedStages.push({ name: stage.name, reason: 'soft-cap' })
+        continue
+      }
+
+      // Seed-list short-circuit: both Core stages depend on the Mongo seed pool.
+      // Running with companies:[] burns an actor-start fee for 0 results and
+      // pollutes the status doc with successful-but-empty stages, masking the
+      // real bottleneck (Sales Lead has not seeded core_seed_companies yet).
+      if (stage.tier === 'core' && seedUrls.length === 0) {
+        results.skippedStages.push({ name: stage.name, reason: 'no-seeds' })
         continue
       }
 
@@ -451,8 +502,9 @@ export default async function handler(req, res) {
       aborted: results.aborted,
       budgetState: state,
       monthToDateInr: results.monthToDateInr,
-      stages: results.stages.map(({ name, items, inserted, ok, error }) => ({
-        name, items, inserted, ok, error,
+      seedUrlsCount: results.seedUrlsCount,
+      stages: results.stages.map(({ name, items, inserted, ok, error, errorKind, recommendedAction }) => ({
+        name, items, inserted, ok, error, errorKind, recommendedAction,
       })),
       skippedStages: results.skippedStages,
     })
