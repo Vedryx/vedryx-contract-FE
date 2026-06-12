@@ -90,8 +90,8 @@ export async function getSeedBatch(db, batchSize = 30) {
 // PR #28 attempted that and saw 669 items returned anyway). Sized to match
 // post-upstream-filter expected yields with headroom for classifier room.
 const CORE_COMPANY_MAX = 30   // 30 seed URLs/night (Sales Lead seeds 150, cron rotates)
-const CORE_EMPLOYEE_MAX = 100 // 30 seeds × ~3 senior+region+title matches = ~60-100
-const PULSE_POST_MAX = 50     // 5 queries × 10/query post-tightening
+const CORE_EMPLOYEE_MAX = 60  // founder cap 2026-06-12 — 60 Core leads/day
+const PULSE_POST_MAX = 40     // founder cap 2026-06-12 — 40 Pulse leads/day
 
 const CORE_COMPANY_ACTOR_INPUT = {
   // harvestapi/linkedin-company — seeded from Mongo `core_seed_companies`.
