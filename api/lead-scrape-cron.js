@@ -24,6 +24,7 @@ import {
   budgetState,
   projectStageCostInr,
   ledgerMonthKey,
+  isMondayIST,
   normalizeHarvestCompanyEmployee,
   normalizeHarvestPostAuthor,
   HARD_CAP_INR,
@@ -388,7 +389,22 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false, message: 'Unauthorized' })
   }
 
+  // Monday-IST skip — telecaller's day off, no point dumping fresh leads.
+  // Vercel Hobby cron day-of-week filter is flaky, so schedule is daily
+  // (`30 20 * * *` UTC = 02:00 IST nightly) and the Mon-IST exclusion lives
+  // here. Manual triggers via x-cron-secret bypass the auth path above and
+  // honour this guard too — that is intentional, keeps prod + manual aligned.
   const startedAt = new Date()
+  if (isMondayIST(startedAt)) {
+    console.log('[lead-scrape-cron] hi — monday IST, skipping')
+    return res.status(200).json({
+      ok: true,
+      skipped: 'monday-ist',
+      message: 'hi',
+      startedAt,
+    })
+  }
+
   const monthKey = ledgerMonthKey(startedAt)
   const results = { startedAt, monthKey, stages: [], skippedStages: [] }
 
