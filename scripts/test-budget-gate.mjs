@@ -16,13 +16,16 @@ import {
   HARD_CAP_INR,
 } from '../api/_apify.js'
 
+// maxItems shapes match api/lead-scrape-cron.js post-throttle (lead-quality-throttle,
+// 2026-06-12). All three actors are now upstream-filtered and seed-list-driven, so
+// the cron-side caps are far below pre-throttle defaults:
+//   core-companies:  30 seed URLs/night (Sales Lead seeds 150; cron rotates)
+//   core-employees:  100 worst-case after seniority+title+location+industry filters
+//   pulse-posts:     50 expected from 5 tightened keywords × maxPosts:10
 const STAGES = [
-  { name: 'core-companies', actorId: 'harvestapi/linkedin-company', maxItems: 2000 },
-  { name: 'core-employees', actorId: 'harvestapi/linkedin-company-employees', maxItems: 1200 },
-  // pulse-posts throttled to 40 items + 24h window — see api/lead-scrape-cron.js
-  // PULSE_POST_ACTOR_INPUT comment. Old value (3000) reflected the unfiltered
-  // Actor default before the 2026-06-12 throttle fix.
-  { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 40 },
+  { name: 'core-companies', actorId: 'harvestapi/linkedin-company', maxItems: 30 },
+  { name: 'core-employees', actorId: 'harvestapi/linkedin-company-employees', maxItems: 100 },
+  { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 50 },
 ]
 
 function simulate(startingLedgerInr, label) {

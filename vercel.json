@@ -67,7 +67,7 @@
   "crons": [
     {
       "path": "/api/lead-scrape-cron",
-      "schedule": "30 20 * * *"
+      "schedule": "30 20 * * 1-6"
     }
   ]
 }

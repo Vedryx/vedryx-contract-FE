@@ -7,6 +7,7 @@
 
 import {
   classifyLead,
+  computeLeadScore,
   normalizeHarvestCompanyEmployee,
   normalizeHarvestPostAuthor,
 } from '../api/_apify.js'
@@ -110,13 +111,158 @@ const cases = [
     },
     expect: 'disqualified',
   },
+  // ---- RA §6.5: title exclusions (lead-quality-throttle) ----
+  {
+    name: 'exclusion: Junior Engineering Manager → disqualified',
+    lead: {
+      person: { title: 'Junior Engineering Manager' },
+      company: { employee_count: 100, industry: 'software', hq_country: 'us' },
+      signal: {},
+    },
+    expect: 'disqualified',
+  },
+  {
+    name: 'exclusion: ex-CTO must not score Core',
+    lead: {
+      person: { title: 'ex-CTO @ Acme' },
+      company: { employee_count: 100, industry: 'software', hq_country: 'us' },
+      signal: {},
+    },
+    expect: 'disqualified',
+  },
+  {
+    name: 'exclusion: freelance Engineering Manager → disqualified',
+    lead: {
+      person: { title: 'Freelance Engineering Manager' },
+      company: { employee_count: 100, industry: 'software', hq_country: 'us' },
+      signal: {},
+    },
+    expect: 'disqualified',
+  },
+  // ---- RA §6.4: headcount band tightened to 51-500 ----
+  {
+    name: 'headcount band: 30-person company no longer earns core:emp-band (below 51)',
+    lead: {
+      person: { title: 'Technical Recruiter' },
+      company: { employee_count: 30, industry: 'software', hq_country: 'us' },
+      signal: {},
+    },
+    // 30-person co: title(2) + industry(1) + geo(1) = 4 coreHits → still core,
+    // but emp-band must NOT be in matched.
+    expect: 'core',
+  },
+  {
+    name: 'headcount band: 800-person company no longer earns core:emp-band (above 500)',
+    lead: {
+      person: { title: 'Director of Engineering' },
+      company: { employee_count: 800, industry: 'software', hq_country: 'uk' },
+      signal: {},
+    },
+    expect: 'core',
+  },
+  // ---- RA §6.6: Pulse pre-filters (engagement, post age, funded exclusion) ----
+  {
+    name: 'pulse pre-filter: zero-engagement post → disqualified',
+    lead: {
+      person: { title: 'Founder' },
+      company: { employee_count: 1 },
+      signal: {
+        post_content_snippet: 'building my MVP, need developer help',
+        engagement: { likes: 0, comments: 0, reactions: [] },
+        posted_at: { date: new Date().toISOString() },
+      },
+      apify: { actor_id: 'harvestapi/linkedin-post-search' },
+    },
+    expect: 'disqualified',
+  },
+  {
+    name: 'pulse pre-filter: stale post (20h old) → disqualified',
+    lead: {
+      person: { title: 'Founder' },
+      company: { employee_count: 1 },
+      signal: {
+        post_content_snippet: 'building my MVP, need developer help',
+        engagement: { likes: 10, comments: 2, reactions: [{ count: 7 }] },
+        posted_at: { date: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString() },
+      },
+      apify: { actor_id: 'harvestapi/linkedin-post-search' },
+    },
+    expect: 'disqualified',
+  },
+  {
+    name: 'pulse pre-filter: fresh post (2h) with comments → pulse',
+    lead: {
+      person: { title: 'Founder' },
+      company: { employee_count: 1 },
+      signal: {
+        post_content_snippet: 'looking for technical cofounder to build my MVP',
+        engagement: { likes: 5, comments: 2, reactions: [{ count: 5 }] },
+        posted_at: { date: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
+      },
+      apify: { actor_id: 'harvestapi/linkedin-post-search' },
+    },
+    expect: 'pulse',
+  },
+  {
+    name: 'pulse pre-filter: funded-stage exclusion ("just raised seed funding")',
+    lead: {
+      person: { title: 'Founder' },
+      company: { employee_count: 5 },
+      signal: {
+        post_content_snippet: 'we just raised seed funding and are building our MVP',
+        engagement: { likes: 50, comments: 10 },
+        posted_at: { date: new Date().toISOString() },
+      },
+      apify: { actor_id: 'harvestapi/linkedin-post-search' },
+    },
+    expect: 'disqualified',
+  },
+  {
+    name: 'pulse pre-filter: Series A exclusion',
+    lead: {
+      person: { title: 'Founder' },
+      company: { employee_count: 5 },
+      signal: {
+        post_content_snippet: 'we just closed our Series A and are hiring devs',
+        engagement: { likes: 100, comments: 25 },
+        posted_at: { date: new Date().toISOString() },
+      },
+      apify: { actor_id: 'harvestapi/linkedin-post-search' },
+    },
+    expect: 'disqualified',
+  },
+  // ---- RA §F: 0-100 score range ----
+  {
+    name: 'score range: top-fit CTO at 200-person US SaaS lands >= 70',
+    lead: {
+      person: { first_name: 'Pat', title: 'CTO' },
+      company: { employee_count: 200, industry: 'SaaS', hq_country: 'us' },
+      signal: {},
+    },
+    expect: 'core',
+    expectScoreMin: 70,
+  },
+  {
+    name: 'score range: scores are integers in 0..100',
+    lead: {
+      person: { first_name: 'A', title: 'Head of Engineering' },
+      company: { employee_count: 250, industry: 'SaaS', hq_country: 'us' },
+      signal: {},
+    },
+    expect: 'core',
+    expectScoreInt: true,
+  },
 ]
 
 let failures = 0
 for (const tc of cases) {
   const got = classifyLead(tc.lead)
-  const ok = got.icp === tc.expect
-  console.log(`${ok ? 'PASS' : 'FAIL'} — ${tc.name}  (got=${got.icp}, score=${got.score.toFixed(2)})`)
+  let ok = got.icp === tc.expect
+  if (ok && typeof tc.expectScoreMin === 'number' && got.score < tc.expectScoreMin) ok = false
+  if (ok && tc.expectScoreInt && !Number.isInteger(got.score)) ok = false
+  // Score must be 0-100 integer-valued from the new rubric.
+  if (ok && (got.score < 0 || got.score > 100)) ok = false
+  console.log(`${ok ? 'PASS' : 'FAIL'} — ${tc.name}  (got=${got.icp}, score=${got.score})`)
   if (!ok) {
     failures += 1
     console.log(`  matched: ${JSON.stringify(got.matched)}`)
@@ -216,6 +362,72 @@ const normalizerCases = [
       norm.signal.post_content_snippet = 'building our MVP, prepping launch'
       const got = classifyLead(norm)
       return got.icp === 'core'
+    },
+  },
+  // ---- RA §6.6: normalizer retains engagement + postedAt for Pulse pre-filters ----
+  {
+    name: 'normalizeHarvestPostAuthor: retains raw.engagement and raw.postedAt',
+    fn: () => {
+      const norm = normalizeHarvestPostAuthor({
+        content: 'looking for technical cofounder',
+        author: { name: 'Sam Singh', linkedinUrl: 'https://www.linkedin.com/in/sam', info: 'Founder' },
+        engagement: { likes: 12, comments: 3, reactions: [{ count: 12 }] },
+        postedAt: { date: new Date().toISOString(), timestamp: Math.floor(Date.now() / 1000) },
+      })
+      return (
+        norm.signal.engagement?.comments === 3 &&
+        Array.isArray(norm.signal.engagement?.reactions) &&
+        norm.signal.posted_at?.date != null
+      )
+    },
+  },
+  // ---- RA §6.4: emp-band must not fire outside 51-500 ----
+  {
+    name: 'headcount band: 30-person co does NOT get core:emp-band signal in matched list',
+    fn: () => {
+      const got = classifyLead({
+        person: { title: 'Technical Recruiter' },
+        company: { employee_count: 30, industry: 'software', hq_country: 'us' },
+        signal: {},
+      })
+      return !got.matched.includes('core:emp-band')
+    },
+  },
+  {
+    name: 'headcount band: 100-person co DOES get core:emp-band signal',
+    fn: () => {
+      const got = classifyLead({
+        person: { title: 'Technical Recruiter' },
+        company: { employee_count: 100, industry: 'software', hq_country: 'us' },
+        signal: {},
+      })
+      return got.matched.includes('core:emp-band')
+    },
+  },
+  // ---- RA §F: computeLeadScore directly callable + bounded 0..100 ----
+  {
+    name: 'computeLeadScore: top-fit Core CTO at 200-person US SaaS lands >= 70 and <= 100',
+    fn: () => {
+      const s = computeLeadScore(
+        {
+          person: { first_name: 'Pat', title: 'CTO' },
+          company: { employee_count: 200, industry: 'SaaS', hq_country: 'us' },
+          signal: {},
+          scraped_at: new Date(),
+        },
+        { icp: 'core', coreHits: 5, pulseHits: 0, matched: [], isPulseSource: false }
+      )
+      return Number.isInteger(s) && s >= 70 && s <= 100
+    },
+  },
+  {
+    name: 'computeLeadScore: disqualified always returns 0',
+    fn: () => {
+      const s = computeLeadScore(
+        { person: { title: 'Account Executive' }, company: {}, signal: {} },
+        { icp: 'disqualified', coreHits: 0, pulseHits: 0, matched: [], isPulseSource: false }
+      )
+      return s === 0
     },
   },
 ]

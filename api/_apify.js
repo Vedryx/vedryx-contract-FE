@@ -100,8 +100,15 @@ export function getApifyToken() {
  * Run an Apify actor synchronously and return the dataset items.
  * @param {string} actorId - e.g. "harvestapi/linkedin-company-employees"
  * @param {object} input - actor input JSON
- * @param {object} opts - { timeoutMs?: number, memoryMbytes?: number }
+ * @param {object} opts - { timeoutMs?: number, memoryMbytes?: number, maxItems?: number }
  * @returns {Promise<{items: any[], runId: string, datasetId: string}>}
+ *
+ * `opts.maxItems` is forwarded as the `maxItems` URL query param on the
+ * run-sync endpoint. This is the AUTHORITATIVE per-run cap on returned items:
+ * the value Apify enforces is the URL parameter, NOT a `maxItems` field placed
+ * in the input body. Past fix attempt (PR #28) set `maxItems: 40` in the body
+ * and saw 669 items returned anyway — the body field is ignored by the sync
+ * endpoint. Callers that want a per-run cap MUST pass `maxItems` here.
  */
 export async function runActor(actorId, input, opts = {}) {
   const token = getApifyToken()
@@ -109,7 +116,14 @@ export async function runActor(actorId, input, opts = {}) {
   const memoryMbytes = opts.memoryMbytes ?? 1024
 
   const slug = actorId.replace('/', '~')
-  const url = `${APIFY_BASE}/acts/${slug}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}&memory=${memoryMbytes}`
+  const params = new URLSearchParams({
+    token,
+    memory: String(memoryMbytes),
+  })
+  if (typeof opts.maxItems === 'number' && Number.isFinite(opts.maxItems) && opts.maxItems > 0) {
+    params.set('maxItems', String(Math.floor(opts.maxItems)))
+  }
+  const url = `${APIFY_BASE}/acts/${slug}/run-sync-get-dataset-items?${params.toString()}`
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -163,16 +177,29 @@ export async function runActor(actorId, input, opts = {}) {
 
 // -------------------- ICP routing --------------------
 
-// Strict regex-bounded list. Source: cmo.md §6.
+// Strict regex-bounded list. Source: cmo.md §6 + RA §6.5 (tightened 2026-06-12).
+// Word-boundary anchors keep these from matching titles like "vp engineering ops"
+// or "former CTO". Substring matches over-classified Core (e.g. plain "vp
+// engineering" matched "vp engineering operations consultant").
 const CORE_TITLE_PATTERNS = [
-  /head of engineering/i,
-  /vp engineering/i,
+  /\bhead of engineering\b/i,
+  /\b(?:vp|vice president)(?: of)? engineering\b/i,
   /\bcto\b/i,
-  /vp talent/i,
-  /hr director/i,
-  /technical recruiter/i,
-  /engineering manager/i,
-  /director of engineering/i,
+  /\b(?:vp|vice president|head)(?: of)? (?:talent|people)\b/i,
+  /\b(?:hr|human resources?) director\b/i,
+  /\b(?:senior |lead |principal )?technical recruiter\b/i,
+  /\bengineering manager\b/i,
+  /\bdirector of engineering\b/i,
+]
+
+// Auto-disqualify titles that contain these tokens. Order matters: applied
+// BEFORE positive scoring so an "ex-CTO" does not pick up a Core hit on \bcto\b.
+// RA §6.5 — covers intern/junior/former/freelance/job-seeker tracks.
+const CORE_TITLE_EXCLUSIONS = [
+  /\b(?:intern|junior|jr\b|associate|assistant|trainee|graduate|fresher)\b/i,
+  /\b(?:former|ex[- ]|past|previous(?:ly)?|retired)\b/i,
+  /\b(?:freelance|contract(?:or)?|consultant|self-employed)\b/i,
+  /\b(?:looking for|seeking|open to|exploring)\b/i,
 ]
 
 const PULSE_TITLE_PATTERNS = [
@@ -228,13 +255,64 @@ export function classifyLead(lead) {
   const industry = (lead.company?.industry || '').toLowerCase()
   const postSnippet = (lead.signal?.post_content_snippet || '').toLowerCase()
 
+  // ---- Exclusion gate (RA §6.5) ----
+  // Apply BEFORE positive scoring so titles like "ex-CTO" or "Junior Engineer"
+  // do not pick up a stray Core hit on \bcto\b / engineering manager etc.
+  if (title && CORE_TITLE_EXCLUSIONS.some((re) => re.test(title))) {
+    matched.push('core:excluded-title')
+    return { icp: 'disqualified', score: 0, matched }
+  }
+
+  // ---- Pulse-source pre-filters (RA §B.3-B.5) ----
+  // Engagement floor, post age (client-side 18h cap — Actor's enum stops at
+  // 24h), and a funded-stage exclusion. Only applied when the lead came from
+  // the post-search Actor, because the engagement/postedAt fields are only
+  // populated there.
+  const isPulseSource = lead.apify?.actor_id === 'harvestapi/linkedin-post-search'
+  if (isPulseSource) {
+    // Engagement floor: posts with zero traction are noise.
+    const eng = lead.signal?.engagement || {}
+    const likes = Number(eng.likes) || 0
+    const comments = Number(eng.comments) || 0
+    const reactionsCount = Array.isArray(eng.reactions)
+      ? eng.reactions.reduce((s, r) => s + (Number(r?.count) || 0), 0)
+      : likes
+    if (comments < 1 && reactionsCount < 5) {
+      matched.push('pulse:zero-engagement')
+      return { icp: 'disqualified', score: 0, matched }
+    }
+
+    // Post age: 18h freshness window. `postedLimit: '24h'` is the tightest
+    // enum the Actor accepts; we trim the trailing 6h client-side.
+    const postedAt = lead.signal?.posted_at || {}
+    const ts =
+      Date.parse(postedAt.date || '') ||
+      (Number(postedAt.timestamp) ? Number(postedAt.timestamp) * 1000 : 0)
+    if (!ts || (Date.now() - ts) > 18 * 60 * 60 * 1000) {
+      matched.push('pulse:stale-post')
+      return { icp: 'disqualified', score: 0, matched }
+    }
+
+    // Funded-stage exclusion: a founder mentioning "just raised Series A" has
+    // dev capacity. Pulse's 19-day pitch does not fit.
+    const FUNDED_PATTERN =
+      /\b(?:series\s+[abcd]|just raised|raised \$\d|seed (?:round|funding)|y combinator)\b/i
+    if (FUNDED_PATTERN.test(postSnippet)) {
+      matched.push('pulse:funded-stage')
+      return { icp: 'disqualified', score: 0, matched }
+    }
+  }
+
   // ---- Core scoring ----
   let coreHits = 0
   if (CORE_TITLE_PATTERNS.some((re) => re.test(title))) {
     matched.push(`core:title:${title.slice(0, 40)}`)
     coreHits += 2
   }
-  if (typeof empCount === 'number' && empCount >= 20 && empCount <= 2000) {
+  // RA §6.4: tightened from 20-2000 to 51-500 (LinkedIn bands D + E). Below 51
+  // there is no eng budget; above 500 the procurement gate elongates the cycle
+  // beyond Vedryx's playbook.
+  if (typeof empCount === 'number' && empCount >= 51 && empCount <= 500) {
     matched.push('core:emp-band')
     coreHits += 1
   }
@@ -270,26 +348,155 @@ export function classifyLead(lead) {
   }
 
   // ---- Decide ----
-  // Conflict rule per cmo.md §6 line 188: when BOTH Core and Pulse signals are
-  // present, route to core (higher LTV). This rule must be evaluated BEFORE
-  // the pulseHits === 3 check, because at small companies (<20 emp) a CTO/Founder
-  // with an MVP post can hit pulseHits=3 (title+tiny+post) before coreHits
-  // reaches 3 (title alone scores 2; emp-band/industry/geo may all miss).
-  // Without this gate, a hands-on CTO at an 8-person startup would silently
-  // land in Pulse and get indie-maker outreach.
+  // Score is now 0-100 (was 0-1). RA §F weighted rubric drives the score; the
+  // routing decision (core / pulse / disqualified) still keys off coreHits and
+  // pulseHits. A one-time migration script rescales existing DB records so the
+  // surface query at threshold 70 is consistent across new and historical docs.
+  //
+  // Conflict rule per cmo.md §6: when BOTH Core and Pulse signals are present,
+  // route to core (higher LTV). This must be evaluated BEFORE the pulseHits === 3
+  // check, because at small companies (<20 emp) a CTO/Founder with an MVP post
+  // can hit pulseHits=3 before coreHits reaches 3.
   const hasCoreSignal = coreHits >= 2 // title-pattern alone scores 2
   const hasPulseSignal = pulseHits >= 1
   if (hasCoreSignal && hasPulseSignal) {
     matched.push('conflict:resolved-to-core')
-    return { icp: 'core', score: Math.min(1, Math.max(coreHits, 3) / 5), matched }
+    const score = computeLeadScore(lead, { icp: 'core', coreHits, pulseHits, matched, isPulseSource })
+    return { icp: 'core', score, matched }
   }
   if (coreHits >= 3) {
-    return { icp: 'core', score: Math.min(1, coreHits / 5), matched }
+    const score = computeLeadScore(lead, { icp: 'core', coreHits, pulseHits, matched, isPulseSource })
+    return { icp: 'core', score, matched }
   }
   if (pulseHits === 3) {
-    return { icp: 'pulse', score: Math.min(1, pulseHits / 3), matched }
+    const score = computeLeadScore(lead, { icp: 'pulse', coreHits, pulseHits, matched, isPulseSource })
+    return { icp: 'pulse', score, matched }
   }
   return { icp: 'disqualified', score: 0, matched }
+}
+
+// -------------------- Weighted 0-100 score (RA §F rubric) --------------------
+// Sum-to-100 weighted rubric. Telecaller surface query thresholds:
+//   >= 80 → priority queue
+//   >= 70 → standard queue
+//   >= 50 → manual review
+//   <  50 → auto-disqualified
+//
+// Component weights (sum = 100):
+//   title fit:           30
+//   region fit:          15
+//   recency:             15
+//   source signal:       20
+//   engagement:          10
+//   bonus signals:       10
+//
+// Weights are judgment calls; revisit after week 4 with reply-rate data.
+
+const TOP_CORE_TITLES = [
+  /\bcto\b/i,
+  /\b(?:vp|vice president)(?: of)? engineering\b/i,
+  /\bhead of engineering\b/i,
+  /\bdirector of engineering\b/i,
+]
+const MID_CORE_TITLES = [
+  /\bengineering manager\b/i,
+  /\b(?:vp|vice president|head)(?: of)? (?:talent|people)\b/i,
+  /\b(?:hr|human resources?) director\b/i,
+]
+
+const REGION_TIER1 = new Set(['us', 'usa', 'united states', 'uk', 'united kingdom', 'gb'])
+const REGION_TIER2 = new Set([
+  'au', 'australia', 'de', 'germany', 'nl', 'netherlands',
+  'se', 'sweden', 'fr', 'france', 'ie', 'ireland',
+])
+const REGION_TIER3 = new Set(['ae', 'uae', 'united arab emirates', 'sa', 'saudi arabia', 'qa', 'qatar'])
+const REGION_TIER4 = new Set(['in', 'india'])
+
+export function computeLeadScore(lead, ctx = {}) {
+  const { icp = 'disqualified', coreHits = 0, isPulseSource = false } = ctx
+  if (icp === 'disqualified') return 0
+
+  const title = lead.person?.title || ''
+  const empCount = lead.company?.employee_count
+  const country = (lead.company?.hq_country || '').toLowerCase()
+  const postSnippet = (lead.signal?.post_content_snippet || '').toLowerCase()
+  const scrapedAt = lead.scraped_at instanceof Date ? lead.scraped_at : new Date(lead.scraped_at || Date.now())
+
+  // 1) Title fit — 0..30
+  let titleFit = 0
+  if (TOP_CORE_TITLES.some((re) => re.test(title))) titleFit = 30
+  else if (MID_CORE_TITLES.some((re) => re.test(title))) titleFit = 20
+  else if (CORE_TITLE_PATTERNS.some((re) => re.test(title))) titleFit = 15
+  else if (/\b(founder|ceo|co-?founder)\b/i.test(title) && typeof empCount === 'number' && empCount > 20) titleFit = 25
+  else if (PULSE_TITLE_PATTERNS.some((re) => re.test(title))) titleFit = 15
+
+  // 2) Region fit — 0..15
+  let regionFit = 0
+  if (country) {
+    if (REGION_TIER1.has(country)) regionFit = 15
+    else if (REGION_TIER2.has(country)) regionFit = 12
+    else if (REGION_TIER3.has(country)) regionFit = 10
+    else if (REGION_TIER4.has(country)) regionFit = 8
+    else regionFit = 5
+  }
+
+  // 3) Recency — 0..15
+  // For Pulse: post age. For Core: scraped_at age.
+  let recencyTs = scrapedAt.getTime()
+  if (isPulseSource) {
+    const postedAt = lead.signal?.posted_at || {}
+    const pts =
+      Date.parse(postedAt.date || '') ||
+      (Number(postedAt.timestamp) ? Number(postedAt.timestamp) * 1000 : 0)
+    if (pts) recencyTs = pts
+  }
+  const ageHours = Math.max(0, (Date.now() - recencyTs) / (60 * 60 * 1000))
+  let recency = 0
+  if (ageHours <= 24) recency = 15
+  else if (ageHours <= 72) recency = 10
+  else if (ageHours <= 168) recency = 5
+
+  // 4) Source signal — 0..20
+  let sourceSignal
+  if (isPulseSource) {
+    if (/\b(looking for|hiring|need (?:a )?developer|seeking)\b/i.test(postSnippet)) sourceSignal = 20
+    else if (/\b(building|shipping|launching|prepping)\b/i.test(postSnippet)) sourceSignal = 10
+    else sourceSignal = 5
+  } else {
+    // Core: current-position-confirmed (first_name + title both populated)
+    const hasName = Boolean((lead.person?.first_name || '').trim())
+    sourceSignal = hasName && title ? 20 : 10
+  }
+
+  // 5) Engagement — 0..10
+  let engagement = 0
+  if (isPulseSource) {
+    const eng = lead.signal?.engagement || {}
+    const comments = Number(eng.comments) || 0
+    const reactionsCount = Array.isArray(eng.reactions)
+      ? eng.reactions.reduce((s, r) => s + (Number(r?.count) || 0), 0)
+      : Number(eng.likes) || 0
+    if (comments >= 5 || reactionsCount >= 20) engagement = 10
+    else if (comments >= 1 || reactionsCount >= 5) engagement = 5
+  } else {
+    // Core: no engagement signal available at scrape time; default to 5
+    // (neutral). Hooks for "company has open senior eng role" can lift this
+    // to 10 when Sales Lead adds that enrichment.
+    engagement = 5
+  }
+
+  // 6) Bonus signals — 0..10
+  let bonus = 0
+  if (isPulseSource) {
+    if (/#buildinpublic/i.test(postSnippet)) bonus += 5
+    if (/\b(pre-seed|pre-launch|pre-revenue|early stage)\b/i.test(postSnippet)) bonus += 5
+  } else {
+    if (coreHits >= 4) bonus += 5 // strong multi-signal Core lead
+  }
+  if (bonus > 10) bonus = 10
+
+  const total = titleFit + regionFit + recency + sourceSignal + engagement + bonus
+  return Math.max(0, Math.min(100, Math.round(total)))
 }
 
 // -------------------- Cost ledger --------------------
@@ -474,6 +681,11 @@ export function normalizeHarvestPostAuthor(raw = {}) {
   doc.person.linkedin_url = author.linkedinUrl || ''
   doc.person.title = author.info || author.headline || ''
   doc.signal.post_content_snippet = (raw.content || raw.text || '').slice(0, 500)
+  // RA §6.6: retain engagement + postedAt for classifier pre-filters.
+  // Without these, the Pulse pre-filters (engagement floor, 18h freshness) fall
+  // back to default-rejecting every post.
+  doc.signal.engagement = raw.engagement || null
+  doc.signal.posted_at = raw.postedAt || null
   doc.apify.actor_id = 'harvestapi/linkedin-post-search'
   doc.apify.run_id = raw.__runId || ''
   doc.apify.dataset_id = raw.__datasetId || ''
