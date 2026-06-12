@@ -6,11 +6,10 @@
 // final ledger exceeds HARD_CAP_INR after running every stage that the gate
 // would actually allow.
 //
-// QA scenario: ledger starts at ₹1,699 (₹1 below soft cap). All four stages
-// configured at full maxItems. Without the per-stage gate, a single run
-// blew ~₹1,368 above the ₹2,000 hard cap. With the gate, expensive stages
-// are skipped pre-actor; only stages whose projected post-run cost stays
-// under the cap actually fire.
+// Updated 2026-06-12 for the actor swap (lead-pipeline-actor-rework). New
+// PPE pricing has TWO components per actor — an `actorStart` flat fee and a
+// per-item event price. The projection is now actor-start + (worst-event ×
+// maxItems), conservatively over-estimating so the gate never under-budgets.
 
 import {
   projectStageCostInr,
@@ -18,10 +17,9 @@ import {
 } from '../api/_apify.js'
 
 const STAGES = [
-  { name: 'core-companies', actorId: 'bebity/linkedin-premium-actor', maxItems: 2000 },
+  { name: 'core-companies', actorId: 'harvestapi/linkedin-company', maxItems: 2000 },
   { name: 'core-employees', actorId: 'harvestapi/linkedin-company-employees', maxItems: 1200 },
-  { name: 'pulse-posts', actorId: 'supreme_coder/linkedin-post', maxItems: 3000 },
-  { name: 'pulse-profiles', actorId: 'supreme_coder/linkedin-profile-scraper', maxItems: 900 },
+  { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 3000 },
 ]
 
 function simulate(startingLedgerInr, label) {
@@ -57,21 +55,36 @@ function simulate(startingLedgerInr, label) {
 
 let failed = false
 
-// QA worst-case
+// Sanity: per-stage projections must be > 0 for all current actors. If they
+// fall back to 0 (missing entry in ACTOR_COSTS_USD), the cap is silently
+// bypassed — guard against that.
+for (const stage of STAGES) {
+  const proj = projectStageCostInr(stage.actorId, stage.maxItems)
+  if (!Number.isFinite(proj) || proj <= 0) {
+    console.error(`FAIL: projection for ${stage.actorId} returned ${proj}; expected positive INR`)
+    failed = true
+  }
+}
+
+// QA worst-case — ledger ₹1 below soft cap; full volumes. Gate must hold cap.
 const qa = simulate(1699, 'QA worst-case (ledger ₹1 below soft cap, full volumes)')
 if (qa.finalLedger > HARD_CAP_INR) {
   console.error(`FAIL: final ledger ₹${qa.finalLedger.toFixed(2)} exceeds HARD_CAP_INR ₹${HARD_CAP_INR}`)
   failed = true
 }
 
-// Healthy start
+// Healthy start — gate should allow every stage to run.
 const fresh = simulate(0, 'Fresh month (ledger at ₹0)')
 if (fresh.finalLedger > HARD_CAP_INR) {
   console.error(`FAIL: final ledger ₹${fresh.finalLedger.toFixed(2)} exceeds HARD_CAP_INR ₹${HARD_CAP_INR}`)
   failed = true
 }
+if (fresh.ran.length !== STAGES.length) {
+  console.error(`FAIL: fresh-month run should not skip stages, got skipped=[${fresh.skipped.join(', ')}]`)
+  failed = true
+}
 
-// Right at hard cap
+// At hard cap — every stage must skip.
 const atCap = simulate(2000, 'At hard cap (every stage should skip)')
 if (atCap.ran.length !== 0) {
   console.error(`FAIL: at hard cap, no stage should run, got ran=[${atCap.ran.join(', ')}]`)
