@@ -19,13 +19,13 @@ export const ACTOR_COSTS_USD = {
 
 // INR conversion rate. Used by BOTH soft AND hard cap checks (see budgetState below).
 // Overridable via USD_TO_INR env var so we don't ship code edits to track FX drift.
-// Default 83 is conservative as of mid-2026; widen the budget headroom rather than
-// shrinking the rate if INR weakens materially.
+// Default 96 matches the rate as of 2026-06-12; widen the budget headroom rather
+// than shrinking the rate if INR weakens materially.
 export const USD_TO_INR = (() => {
   const raw = process.env.USD_TO_INR
-  if (!raw) return 83
+  if (!raw) return 96
   const n = Number(raw)
-  if (!Number.isFinite(n) || n <= 0) return 83
+  if (!Number.isFinite(n) || n <= 0) return 96
   // Floor at 80 to prevent a misconfigured low rate from understating real spend.
   return Math.max(n, 80)
 })()
