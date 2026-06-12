@@ -126,7 +126,13 @@ const CORE_EMPLOYEE_ACTOR_INPUT = {
     'Germany', 'Netherlands', 'France', 'Sweden', 'Ireland',
     'United Arab Emirates', 'Saudi Arabia', 'India',
   ],
-  companyHeadcount: ['D', 'E'], // 51-200, 201-500
+  // companyHeadcount intentionally OMITTED (2026-06-12, fix/employees-headcount-band):
+  // seed URLs are explicitly curated upstream by Sales Lead against the
+  // seed-list rubric (RA §4: headcount 51-500). Re-filtering by harvestapi's
+  // band enum here is redundant and costs leads — band C (51-200) holds the
+  // bulk of curated seeds and was being silently excluded by the prior
+  // ['D','E'] filter (run Vb6LZkh4EqRlR0Ka9 returned 0 across 11 seeds).
+  // The seed-list rubric is now the company-quality gate.
   // Verified against harvestapi CSV 2026-06-12:
   //   4  = Software Development
   //   6  = Technology, Information and Internet
