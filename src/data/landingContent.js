@@ -110,3 +110,104 @@ export const technologyGroups = [
 ]
 
 export const serviceAreas = ['United States', 'United Kingdom', 'Europe', 'Australia', 'Middle East', 'India']
+
+/**
+ * FAQ content — single source of truth for both the rendered FAQSection and
+ * the FAQPage JSON-LD injected into the document head.
+ *
+ * Each item carries:
+ *   - q      : plain question string (exact rendered text)
+ *   - a      : array of answer segments, each `{ text, bold? }`. Joining all
+ *              `text` values yields the plain-text answer (used by JSON-LD and
+ *              the schema.org `Answer/text` microdata property). Segments
+ *              marked `bold` render inside <strong> in the DOM.
+ *
+ * Order is buyer-intent ranked (revised 2026-06-10).
+ *
+ * Editing rules:
+ *   1. The plain-text answer (segments joined) MUST match the visible DOM
+ *      character-for-character — that is how Google validates FAQPage.
+ *   2. Do NOT add a duplicate FAQPage schema anywhere else on the site.
+ *   3. Renumbering is handled in the component (01..0n by index).
+ */
+export const faqItems = [
+  {
+    q: 'How does the replacement guarantee actually work?',
+    a: [
+      { text: 'Unlimited replacement.', bold: true },
+      { text: ' That is the promise. If a developer is not the right fit, Vedryx replaces them — ' },
+      { text: 'at no extra cost, with no cap on the number of swaps', bold: true },
+      { text: '. ' },
+      { text: '72-hour replacement SLA', bold: true },
+      { text: ': from your written notice of dissatisfaction, Vedryx delivers a vetted replacement shortlist within 72 hours. You are never locked to a hire that is not working. Specific guarantee terms are set out in your engagement contract.' },
+    ],
+  },
+  {
+    q: 'How does Vedryx vet developers?',
+    a: [
+      { text: 'Vedryx Core developers are not freelancers we found yesterday. Every engineer clears ' },
+      { text: 'multiple rounds of structured interviews', bold: true },
+      { text: ' and is then ' },
+      { text: 'hired as a full-time Vedryx employee', bold: true },
+      { text: '. Before they ever join a client engagement, they spend time working inside Vedryx on ' },
+      { text: 'our own in-house products', bold: true },
+      { text: ' — shipping real code, in real repositories, against real deadlines. That is how we verify code quality, delivery discipline, and how someone actually behaves on a team. By the time a developer reaches a client, we have watched them ship.' },
+    ],
+  },
+  {
+    q: 'How long is a Vedryx Core engagement?',
+    a: [
+      { text: 'Engagements are ' },
+      { text: 'flexible and shaped around the work', bold: true },
+      { text: '. Some clients run a focused build for a few months; others keep the same Vedryx engineer embedded for years. We agree the term and the exit terms with each client directly in the contract so they fit your hiring plan, not a template.' },
+    ],
+  },
+  {
+    q: 'Who owns the IP and the code?',
+    a: [
+      { text: 'You do. ' },
+      { text: 'Full assignment.', bold: true },
+      { text: ' All work product — code, designs, documentation, infrastructure config — is assigned to your company on creation, written into the master services agreement. Developers commit directly to your repositories under your accounts, sign your NDA in addition to the Vedryx confidentiality clause, and have no residual rights. Vedryx never reuses client code across engagements.' },
+    ],
+  },
+  {
+    q: 'How is Vedryx Core different from Toptal, Andela, or Turing?',
+    a: [
+      { text: 'Three differences clients consistently call out. ' },
+      { text: 'One: dedicated, not marketplace', bold: true },
+      { text: ' — Vedryx Core engagements are full-time monthly placements, not hourly gigs. ' },
+      { text: 'Two: unlimited replacement at no extra cost', bold: true },
+      { text: ' — Toptal and Turing typically charge for re-matching or impose multi-week re-vetting cycles. ' },
+      { text: 'Three: a single Vedryx-to-client contract', bold: true },
+      { text: ' that keeps PIP, severance, and employment liability entirely off your books — the developer stays a Vedryx employee throughout.' },
+    ],
+  },
+]
+
+/**
+ * Plain-text answer for JSON-LD. Strips bold flags but keeps the exact words
+ * so the structured-data `text` field matches the visible DOM character-for-character.
+ */
+export function faqAnswerText(item) {
+  return item.a.map((seg) => seg.text).join('').trim()
+}
+
+/**
+ * Builds the FAQPage schema object from `faqItems`. Used by the build-time
+ * head-injection script so visible DOM and structured data stay in sync.
+ */
+export function buildFaqSchema(items = faqItems) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((item) => ({
+      '@type': 'Question',
+      name: item.q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faqAnswerText(item),
+      },
+    })),
+  }
+}
+

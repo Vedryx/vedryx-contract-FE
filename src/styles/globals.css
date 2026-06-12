@@ -73,7 +73,8 @@ section { position: relative; z-index: 2; }
 #submit,
 #stack,
 #why,
-#final-cta {
+#final-cta,
+#faq {
   scroll-margin-top: 104px;
 }
 
@@ -171,7 +172,8 @@ body.anim .reveal-in { opacity: 1 !important; transform: none !important; transi
   #submit,
   #stack,
   #why,
-  #final-cta {
+  #final-cta,
+  #faq {
     scroll-margin-top: 92px;
   }
 

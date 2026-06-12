@@ -12,3 +12,7 @@ export function render(url = '/') {
     </StrictMode>,
   )
 }
+
+// Re-exported for the prerender script (FAQPage JSON-LD injection).
+// Single source of truth: content + schema both flow from landingContent.js.
+export { buildFaqSchema, faqItems } from './data/landingContent.js'

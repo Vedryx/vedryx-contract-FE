@@ -4,6 +4,7 @@ import { ClosingSection } from '../../components/sections/ClosingSection/Closing
 import { ComparisonScene } from '../../components/sections/ComparisonScene/ComparisonScene.jsx'
 import { DecisionPathSection } from '../../components/sections/DecisionPathSection/DecisionPathSection.jsx'
 import { EngineSection } from '../../components/sections/EngineSection/EngineSection.jsx'
+import { FAQSection } from '../../components/sections/FAQSection/FAQSection.jsx'
 import { HeroSection } from '../../components/sections/HeroSection/HeroSection.jsx'
 import { RiskFreeSection } from '../../components/sections/RiskFreeSection/RiskFreeSection.jsx'
 import { StackSection } from '../../components/sections/StackSection/StackSection.jsx'
@@ -26,6 +27,7 @@ export function LandingPage() {
       <StackSection />
       <WhySection />
       <ClosingSection />
+      <FAQSection />
       <SiteFooter />
     </>
   )
