@@ -1,0 +1,3 @@
+# Weekly PSI snapshots are committed here by .github/workflows/psi-monitor.yml.
+# Filenames: <form_factor>-<host-slug>.json (e.g. mobile-vedryxtech-com.json).
+# Snapshot file is overwritten each week; git history is the time series.
