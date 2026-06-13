@@ -1,0 +1,66 @@
+{
+  "url": "https://vedryxtech.com/",
+  "strategy": "mobile",
+  "fetched_at": "2026-06-13T15:21:00.084Z",
+  "lighthouse_version": "13.3.0",
+  "categories": {
+    "performance": 59,
+    "accessibility": 99,
+    "best-practices": 100,
+    "seo": 100
+  },
+  "audits": {
+    "largest-contentful-paint": {
+      "score": 0.07,
+      "display_value": "6.7 s"
+    },
+    "cumulative-layout-shift": {
+      "score": 1,
+      "display_value": "0"
+    },
+    "total-blocking-time": {
+      "score": 0.86,
+      "display_value": "230 ms"
+    },
+    "speed-index": {
+      "score": 0.48,
+      "display_value": "5.9 s"
+    },
+    "first-contentful-paint": {
+      "score": 0.16,
+      "display_value": "4.4 s"
+    },
+    "unused-javascript": {
+      "score": 0,
+      "display_value": "Est savings of 311 KiB"
+    },
+    "unminified-javascript": {
+      "score": 1,
+      "display_value": null
+    },
+    "server-response-time": {
+      "score": 1,
+      "display_value": "Root document took 0 ms"
+    },
+    "color-contrast": {
+      "score": 1,
+      "display_value": null
+    },
+    "image-alt": {
+      "score": 1,
+      "display_value": null
+    },
+    "meta-description": {
+      "score": 1,
+      "display_value": null
+    },
+    "crawlable-anchors": {
+      "score": 1,
+      "display_value": null
+    },
+    "is-on-https": {
+      "score": 1,
+      "display_value": null
+    }
+  }
+}
