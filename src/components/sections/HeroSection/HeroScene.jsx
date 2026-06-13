@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isWebglAvailable, reportWebglUnavailable } from '../../../utils/webglSupport.js'
 
 /**
  * Defer Three.js init until the browser is idle.
@@ -13,11 +14,21 @@ import { useEffect, useRef, useState } from 'react'
  *      markup, so it shows up in the HTML response too — no flash).
  *   2. On the client, if the user prefers reduced motion, skip Three.js
  *      entirely and leave the static fallback in place permanently.
- *   3. Otherwise, schedule the dynamic-import + scene setup via
+ *   3. Feature-detect WebGL via `webglSupport.isWebglAvailable()`. If the
+ *      browser cannot give us a WebGL context (Edge/Windows users with
+ *      unidentified GPUs, RDP/Citrix sessions, hardware accel disabled —
+ *      Sentry issue VEDRYX-CORE-WEB-2), skip Three.js entirely and leave
+ *      the static fallback in place permanently. Same behavior as
+ *      reduced-motion.
+ *   4. Otherwise, schedule the dynamic-import + scene setup via
  *      `requestIdleCallback` (timeout 2000ms) so it runs after LCP fires.
  *      Safari/iOS (which still don't ship RIC as of mid-2026) fall back to
  *      `setTimeout(..., 0)` — runs after the current task, post first paint.
- *   4. Once the canvas is mounted, fade out the static fallback. No layout
+ *   5. The WebGLRenderer constructor is wrapped in try/catch. Detection can
+ *      pass while construction still fails on a small subset of drivers;
+ *      that path also collapses to the static fallback and breadcrumbs to
+ *      Sentry at INFO level (not error — user environment, not our bug).
+ *   6. Once the canvas is mounted, fade out the static fallback. No layout
  *      shift because both share the same absolutely-positioned wrapper.
  */
 export function HeroScene() {
@@ -38,6 +49,16 @@ export function HeroScene() {
 
     if (reduced) return undefined
 
+    // WebGL feature-detect. On Edge/Windows users with unidentified GPUs
+    // (VENDOR/DEVICE = 0xffff), RDP sessions, or disabled hardware accel,
+    // the browser refuses to give us a WebGL context. Skip Three.js entirely
+    // — the static fallback is the experience. Soft-breadcrumb to Sentry at
+    // INFO level so we can size the affected population without paging.
+    if (!isWebglAvailable()) {
+      reportWebglUnavailable('feature-detect-failed', { surface: 'hero' })
+      return undefined
+    }
+
     let cleanupScene = null
     let cancelled = false
     let idleHandle = null
@@ -57,11 +78,23 @@ export function HeroScene() {
       camera.position.set(0, 3.4, 20)
       camera.lookAt(0, -1, 0)
 
-      const renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true,
-        powerPreference: 'high-performance',
-      })
+      // Driver-level failures can still throw here even after a passing
+      // feature detect (sandboxed iframes, broken integrated GPUs, etc.).
+      // Catch, breadcrumb, leave the static fallback in place. No retry.
+      let renderer
+      try {
+        renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          alpha: true,
+          powerPreference: 'high-performance',
+        })
+      } catch (err) {
+        reportWebglUnavailable('renderer-construct-threw', {
+          surface: 'hero',
+          message: err?.message,
+        })
+        return
+      }
       renderer.setClearColor(0x000000, 0)
       renderer.domElement.className = 'scene-canvas'
       mount.appendChild(renderer.domElement)
