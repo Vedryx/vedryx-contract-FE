@@ -1,0 +1,146 @@
+name: PSI weekly monitor
+
+# Weekly PageSpeed Insights audit against production.
+# Schedule: Mondays 09:00 UTC = 14:30 IST. Also manually triggerable.
+# Free GitHub Actions runner + free PSI API quota — ₹0 ongoing.
+#
+# Behavior:
+#   1. Run scripts/psi-check.mjs against each production URL × form_factor.
+#   2. Persist JSON snapshots into .psi-snapshots/ (committed to main).
+#   3. If any regression detected (perf drop >10pts, perf <70 absolute, or
+#      tracked audit crosses passing → failing), open a GitHub issue with
+#      label `perf-regression`.
+#
+# Required secret (set in repo Settings → Secrets and variables → Actions):
+#   PAGESPEED_API_KEY — same value as Vercel env. PSI API will work without
+#                       it but rate-limits aggressively; weekly cron is fine.
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Monday 09:00 UTC = 14:30 IST
+  workflow_dispatch: {}
+
+permissions:
+  contents: write       # to commit .psi-snapshots/ back to main
+  issues: write         # to open regression issues
+
+jobs:
+  psi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      TARGET_URLS: https://vedryxtech.com/
+      PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Run PSI check
+        id: psi
+        run: |
+          set -euo pipefail
+          SUMMARY=$(node scripts/psi-check.mjs)
+          echo "$SUMMARY" > psi-summary.json
+          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          HAS_REG=$(echo "$SUMMARY" | jq -r '.has_regression')
+          echo "has_regression=$HAS_REG" >> "$GITHUB_OUTPUT"
+
+      - name: Commit snapshot updates
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .psi-snapshots
+          if git diff --cached --quiet; then
+            echo "No snapshot changes to commit."
+            exit 0
+          fi
+          STAMP=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
+          git commit -m "chore(psi): weekly snapshot ${STAMP} [skip ci]"
+          git push origin HEAD:main
+
+      - name: Open regression issue
+        if: steps.psi.outputs.has_regression == 'true'
+        uses: actions/github-script@v8
+        env:
+          SUMMARY_JSON: ${{ steps.psi.outputs.summary }}
+        with:
+          script: |
+            const summary = JSON.parse(process.env.SUMMARY_JSON);
+            const lines = [];
+            lines.push('### PSI weekly regression');
+            lines.push('');
+            lines.push(`Ran at \`${summary.ran_at}\`.`);
+            lines.push('');
+            lines.push('| URL | Form factor | Perf prev | Perf now | Δ | A11y | BP | SEO |');
+            lines.push('|---|---|---:|---:|---:|---:|---:|---:|');
+            for (const r of summary.results) {
+              const prev = r.prev_categories || {};
+              const next = r.next_categories || {};
+              const delta = (prev.performance != null && next.performance != null)
+                ? next.performance - prev.performance
+                : '—';
+              const fmt = (d) => d === '—' ? '—' : (Number(d) > 0 ? `+${d}` : `${d}`);
+              lines.push(`| ${r.url} | ${r.strategy} | ${prev.performance ?? '—'} | **${next.performance ?? '—'}** | ${fmt(delta)} | ${next.accessibility ?? '—'} | ${next['best-practices'] ?? '—'} | ${next.seo ?? '—'} |`);
+            }
+            lines.push('');
+            const allRegs = summary.results.flatMap((r) =>
+              r.regressions.map((reg) => ({ url: r.url, strategy: r.strategy, ...reg }))
+            );
+            if (allRegs.length > 0) {
+              lines.push('### Regressions');
+              lines.push('');
+              for (const reg of allRegs) {
+                lines.push(`- **[${reg.strategy}] ${reg.url}** — ${reg.note}`);
+              }
+              lines.push('');
+            }
+            if (summary.failures && summary.failures.length > 0) {
+              lines.push('### Failures (audit could not run)');
+              lines.push('');
+              for (const f of summary.failures) {
+                lines.push(`- **[${f.strategy}] ${f.url}** — ${f.error}`);
+              }
+              lines.push('');
+            }
+            lines.push('Snapshots: [.psi-snapshots/](../tree/main/.psi-snapshots)');
+            const body = lines.join('\n');
+
+            const date = new Date().toISOString().slice(0, 10);
+            const title = `PSI regression — ${date}`;
+
+            // De-dupe: if an open perf-regression issue already exists for
+            // this week, comment instead of opening a new one.
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'perf-regression',
+              per_page: 20,
+            });
+            const existing = openIssues.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['perf-regression'],
+              });
+            }
