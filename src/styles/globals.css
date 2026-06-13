@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap');
+/* Google Fonts is loaded non-blocking from index.html via the media-swap
+   pattern (rel="stylesheet" media="print" onload=this.media='all'). Keeping
+   it here as a CSS @import made it render-blocking (752 ms on mobile per
+   PSI). Do NOT re-add the @import here. */
 @import "tailwindcss";
 
 :root {

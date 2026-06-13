@@ -15,19 +15,24 @@ import { usePageMotion } from '../../hooks/usePageMotion.js'
 export function LandingPage() {
   usePageMotion()
 
+  // <main> landmark satisfies PSI "landmark-one-main" a11y audit. Wraps
+  // every section between the global nav and footer so screen-reader and
+  // assistive-tech "skip to main" works correctly.
   return (
     <>
       <Nav />
-      <HeroSection />
-      <TrustLayer />
-      <ComparisonScene />
-      <EngineSection />
-      <RiskFreeSection />
-      <DecisionPathSection />
-      <StackSection />
-      <WhySection />
-      <ClosingSection />
-      <FAQSection />
+      <main id="main">
+        <HeroSection />
+        <TrustLayer />
+        <ComparisonScene />
+        <EngineSection />
+        <RiskFreeSection />
+        <DecisionPathSection />
+        <StackSection />
+        <WhySection />
+        <ClosingSection />
+        <FAQSection />
+      </main>
       <SiteFooter />
     </>
   )
