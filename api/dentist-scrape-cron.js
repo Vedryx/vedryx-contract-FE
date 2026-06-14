@@ -1,11 +1,20 @@
 // Nightly US dentist scrape cron. Hit by Vercel Cron at 20:30 UTC (02:00 IST).
 //
 // Pipeline (one city per night, oldest last_scraped first):
-//   1. Apify compass/crawler-google-places → 100 raw dentist places for city
+//   1. Apify compass/crawler-google-places → ~360 raw dentist places for city
+//      (3 search strings × 120/search). Actor's own `scrapeContacts: true`
+//      surfaces emails inline; no separate email-crawl stage.
 //   2. PSI mobile-perf grade  → drop dentists whose site scores >= 50
-//   3. Apify apify/website-content-crawler → optional domain email
-//   4. Strict AND gate (see api/_dentist.js#landsInDb)
-//   5. Upsert into pulse_local_leads, dedup by phone
+//   3. Strict AND gate (see api/_dentist.js#landsInDb)
+//   4. Upsert into pulse_local_leads, dedup by phone
+//
+// Iteration 1 fix (2026-06-14, pulse-local-dentist-cron/cto-002):
+//   - normalizer maps `title` → name, falls back to `subTitle`; pulls website
+//     from `website || webResults[0]?.url`; surfaces `emails[0]` inline.
+//   - maxCrawledPlacesPerSearch raised 40 → 120 (Apify cost ~$0.20/run vs $0.05).
+//   - email-scrape stage REMOVED. Email is now optional pass-through from the
+//     maps row's `emails` array.
+//   - Sentry breadcrumbs at stage entry/exit; `dropped:` counter on response.
 //
 // Reuses the LinkedIn cron's patterns: CRON_SECRET fail-closed auth, monthly
 // pipeline_cost_ledger with SOFT/HARD caps in INR, Mon-IST skip, Sentry on
@@ -18,7 +27,7 @@
 //   pipeline_cost_ledger (shared with LinkedIn cron — same monthly budget)
 
 import { getDatabaseName, getMongoClient } from './_mongo.js'
-import { captureRouteError } from './_sentry.js'
+import { breadcrumb, captureRouteError } from './_sentry.js'
 import {
   runActor,
   recordActorCost,
@@ -35,7 +44,6 @@ import {
   landsInDb,
   normalizeGoogleMapsDentist,
   gradeWebsiteWithPsi,
-  scrapeDomainEmail,
   mapBounded,
 } from './_dentist.js'
 
@@ -43,21 +51,22 @@ const LEADS_COLLECTION = 'pulse_local_leads'
 const RUNS_COLLECTION = 'pipeline_runs'
 const LEDGER_COLLECTION = 'pipeline_cost_ledger'
 
-// Per-night volumes. RA §5 expected ~100 raw → ~38 land after AND gate.
-const MAPS_MAX_PLACES = 100
-const EMAIL_MAX_TARGETS = 80 // cap email-stage runs; bigger than expected after PSI filter
+// Per-night volumes. Apify Actor returns ~120 places per search string × 3
+// strings = ~360 raw places. Iteration 0 used 40 → too few survived field-
+// availability gates (only ~30-50% of Google profiles list a website at all).
+// Apify cost stays small (~$0.20/run vs prior ~$0.05).
+const MAPS_PER_SEARCH = 120
+const MAPS_MAX_PLACES = MAPS_PER_SEARCH * 3 // ledger projection ceiling
 
-// Per-stage wall-clock budgets. Vercel Hobby caps function at 300s. PSI and
-// email stages are concurrency-bounded; total budget below 270s leaves headroom
-// for Mongo writes and ledger updates.
+// Per-stage wall-clock budgets. Vercel Hobby caps function at 300s. PSI is
+// concurrency-bounded; total budget below 270s leaves headroom for Mongo
+// writes and ledger updates.
 const STAGE_TIMEOUT_MS = {
-  'maps-scrape': 90_000,
+  'maps-scrape': 120_000,
   'psi-grade': 120_000,
-  'email-scrape': 90_000,
 }
 
 const MAPS_ACTOR = 'compass/crawler-google-places'
-const EMAIL_ACTOR = 'apify/website-content-crawler'
 
 function classifyActorError(message = '') {
   const m = String(message)
@@ -78,15 +87,19 @@ async function readLedger(db, monthKey) {
 }
 
 /**
- * Run the Google Maps stage. Returns the normalized rows that survived the
- * "must have website" early-drop. Updates ledger.
+ * Run the Google Maps stage. Returns ALL normalized rows (incl. rows with
+ * null website). AND-gate enforcement happens downstream in persistLeads so
+ * dropReasons get an honest per-field breakdown. Updates ledger.
  */
 async function runMapsStage({ db, req, city, results }) {
   const stageName = 'maps-scrape'
+  await breadcrumb('dentist-cron', 'maps-stage:enter', {
+    city: city.city, state: city.state, perSearch: MAPS_PER_SEARCH,
+  })
   const input = {
     searchStringsArray: ['dentist', 'cosmetic dentist', 'orthodontist'],
     locationQuery: `${city.city}, ${city.state}, USA`,
-    maxCrawledPlacesPerSearch: Math.ceil(MAPS_MAX_PLACES / 3),
+    maxCrawledPlacesPerSearch: MAPS_PER_SEARCH,
     language: 'en',
     scrapeContacts: true,
     exportPlaceUrls: false,
@@ -103,6 +116,7 @@ async function runMapsStage({ db, req, city, results }) {
     const { kind, action } = classifyActorError(errMsg)
     console.error(`[${stageName}] actor failed (${kind})`, errMsg)
     await captureRouteError(req, err, { stage: stageName, actor: MAPS_ACTOR, errorKind: kind })
+    await breadcrumb('dentist-cron', 'maps-stage:exit', { ok: false, kind }, 'error')
     results.stages.push({
       name: stageName, actor: MAPS_ACTOR, ok: false, error: errMsg,
       errorKind: kind, ...(action ? { recommendedAction: action } : {}),
@@ -111,12 +125,30 @@ async function runMapsStage({ db, req, city, results }) {
   }
   const { items, runId, datasetId, usageTotalUsd } = actorOut
 
-  // Normalize + early-drop (no website = no business for us).
+  // Normalize. Only drops on missing name (truly unusable). Missing website
+  // is preserved (and `website: null`) so persistLeads can count the drop.
   const rows = []
+  let unnamedDropped = 0
+  let withWebsite = 0
+  let withEmail = 0
   for (const raw of items) {
     const norm = normalizeGoogleMapsDentist(raw)
-    if (norm) rows.push(norm)
+    if (!norm) {
+      unnamedDropped += 1
+      continue
+    }
+    if (norm.website) withWebsite += 1
+    if (norm.email) withEmail += 1
+    rows.push(norm)
   }
+
+  await breadcrumb('dentist-cron', 'maps-stage:normalize', {
+    raw: items.length,
+    normalized: rows.length,
+    unnamedDropped,
+    withWebsite,
+    withEmail,
+  })
 
   // Ledger — measured if Apify returned a figure, else conservative projection.
   try {
@@ -126,46 +158,62 @@ async function runMapsStage({ db, req, city, results }) {
     })
     results.stages.push({
       name: stageName, actor: MAPS_ACTOR, items: items.length,
-      withWebsite: rows.length, runUsageUsd: usageTotalUsd,
+      normalized: rows.length, unnamedDropped,
+      withWebsite, withEmail,
+      runUsageUsd: usageTotalUsd,
       runId, datasetId, ok: true,
     })
+    await breadcrumb('dentist-cron', 'maps-stage:exit', { ok: true, rows: rows.length })
     return { rows, ledgerOk: true }
   } catch (err) {
     console.error(`[${stageName}] ledger write failed`, err?.message)
     await captureRouteError(req, err, { stage: stageName, actor: MAPS_ACTOR, kind: 'ledger-write-failure' })
     results.stages.push({
       name: stageName, actor: MAPS_ACTOR, items: items.length,
-      withWebsite: rows.length, ok: false,
+      normalized: rows.length, unnamedDropped,
+      withWebsite, withEmail, ok: false,
       error: `ledger-write-failure: ${String(err?.message || err)}`,
     })
+    await breadcrumb('dentist-cron', 'maps-stage:exit', { ok: false, kind: 'ledger-write-failure' }, 'error')
     return { rows, ledgerOk: false }
   }
 }
 
 /**
- * Run PSI on each candidate. Returns the subset whose mobile-perf score < 50.
+ * Run PSI on each candidate that has a website. Rows without a website pass
+ * through with `pagespeed: null` so persistLeads can count them as
+ * `no-website` drops with honest per-field accounting.
+ *
  * Concurrency 8 with 200ms inter-batch delay stays well within 25K/day quota
  * and the ~50 RPS per-IP throttle.
  */
 async function runPsiStage({ req, rows, apiKey, results }) {
   const stageName = 'psi-grade'
+  await breadcrumb('dentist-cron', 'psi-stage:enter', { candidates: rows.length })
   if (!apiKey) {
     results.stages.push({
       name: stageName, ok: false, error: 'no-pagespeed-api-key',
       recommendedAction: 'Founder: set PAGESPEED_API_KEY in Vercel env.',
     })
-    return []
+    await breadcrumb('dentist-cron', 'psi-stage:exit', { ok: false, reason: 'no-api-key' }, 'error')
+    return rows.map((r) => ({ ...r, pagespeed: null, flag: null }))
   }
   if (!rows.length) {
-    results.stages.push({ name: stageName, items: 0, badSites: 0, ok: true })
+    results.stages.push({ name: stageName, items: 0, graded: 0, psiErrors: 0, ok: true })
+    await breadcrumb('dentist-cron', 'psi-stage:exit', { ok: true, graded: 0 })
     return []
   }
+
+  // Split: only grade rows that actually have a website. Pass the rest
+  // through untouched (pagespeed: null) so AND-gate drop accounting is honest.
+  const gradable = rows.filter((r) => typeof r.website === 'string' && r.website.length > 0)
+  const ungradable = rows.filter((r) => !r.website).map((r) => ({ ...r, pagespeed: null, flag: null }))
 
   const startedAt = Date.now()
   let graded
   try {
     graded = await mapBounded(
-      rows,
+      gradable,
       async (row) => {
         const psi = await gradeWebsiteWithPsi(row.website, apiKey, { timeoutMs: 30_000 })
         return { ...row, pagespeed: psi.score, flag: psi.flag, psiError: psi.error }
@@ -177,7 +225,8 @@ async function runPsiStage({ req, rows, apiKey, results }) {
     console.error(`[${stageName}] failed`, errMsg)
     await captureRouteError(req, err, { stage: stageName })
     results.stages.push({ name: stageName, ok: false, error: errMsg })
-    return []
+    await breadcrumb('dentist-cron', 'psi-stage:exit', { ok: false, error: errMsg }, 'error')
+    return ungradable
   }
 
   // Stage budget enforcement: bail if we've blown the timeout slot.
@@ -193,79 +242,30 @@ async function runPsiStage({ req, rows, apiKey, results }) {
     (r) => Number.isFinite(r.pagespeed) && r.pagespeed < 50 && r.flag
   )
   results.stages.push({
-    name: stageName, items: rows.length, graded: graded.length,
-    psiErrors, badSites: badSites.length, ok: true,
+    name: stageName,
+    items: rows.length,
+    gradable: gradable.length,
+    ungradable: ungradable.length,
+    graded: graded.length,
+    psiErrors,
+    badSites: badSites.length,
+    ok: true,
   })
-  return badSites
-}
-
-/**
- * Email scrape for bad-site rows. Email is OPTIONAL — failures land null,
- * not dropped. Ledger uses pagesCrawled * actor cost as the projection floor;
- * Apify's run-level usage figure overrides if available.
- */
-async function runEmailStage({ db, req, rows, results }) {
-  const stageName = 'email-scrape'
-  if (!rows.length) {
-    results.stages.push({ name: stageName, items: 0, emailsFound: 0, ok: true })
-    return rows
-  }
-  // Cap targets — even at 100 PSI-failing dentists we don't want to spawn
-  // 100 separate Apify runs; bigger crawls amortize better but we treat
-  // each as an isolated cheap call here for simplicity.
-  const targets = rows.slice(0, EMAIL_MAX_TARGETS)
-
-  let withEmail
-  let pagesTotal = 0
-  let errors = 0
-  try {
-    withEmail = await mapBounded(
-      targets,
-      async (row) => {
-        const r = await scrapeDomainEmail(row.website, { maxPages: 5, timeoutMs: 45_000 })
-        if (r.error) errors += 1
-        pagesTotal += r.pagesCrawled || 0
-        return { ...row, email: r.email }
-      },
-      { concurrency: 3, delayMs: 300 }
-    )
-  } catch (err) {
-    const errMsg = String(err?.message || err)
-    console.error(`[${stageName}] failed`, errMsg)
-    await captureRouteError(req, err, { stage: stageName })
-    results.stages.push({ name: stageName, ok: false, error: errMsg })
-    // Email is optional — fall through with email=null on the targets we never
-    // got to, so the AND gate can still drop or keep them on phone/site/score.
-    return targets.map((r) => ({ ...r, email: null }))
-  }
-
-  // Ledger — projection floor based on pages crawled (single-actor accounting).
-  try {
-    await recordActorCost(db, EMAIL_ACTOR, {
-      runUsageUsd: null, // sync-run total is split across many calls; use projection
-      itemCount: pagesTotal || targets.length,
-    })
-  } catch (err) {
-    console.error(`[${stageName}] ledger write failed`, err?.message)
-    await captureRouteError(req, err, { stage: stageName, actor: EMAIL_ACTOR, kind: 'ledger-write-failure' })
-    results.stages.push({
-      name: stageName, items: targets.length, ok: false,
-      error: `ledger-write-failure: ${String(err?.message || err)}`,
-    })
-    return withEmail
-  }
-
-  const emailsFound = withEmail.filter((r) => r.email).length
-  results.stages.push({
-    name: stageName, items: targets.length, pagesCrawled: pagesTotal,
-    emailsFound, errors, ok: true,
+  await breadcrumb('dentist-cron', 'psi-stage:exit', {
+    ok: true, graded: graded.length, psiErrors, badSites: badSites.length,
   })
-  return withEmail
+  // Return ALL rows (graded + ungradable) so persistLeads can count drops
+  // accurately. AND-gate enforces the final filter.
+  return [...graded, ...ungradable]
 }
 
 /**
  * Insert / dedup leads. Dedup key = phone (Mongo unique index).
  * On collision: update pagespeed/flag/scraped_at; preserve `first_seen`.
+ *
+ * Also returns a structured `dropped:` counter so the cron response surfaces
+ * "dropped 35 for missing website, 12 for score>=50" etc. — founder reads it
+ * post-manual-trigger to decide the next iteration.
  */
 async function persistLeads({ db, candidates, city, results }) {
   const col = db.collection(LEADS_COLLECTION)
@@ -335,14 +335,24 @@ async function persistLeads({ db, candidates, city, results }) {
     candidates: candidates.length,
     inserted, updated, dropped, dropReasons,
   }
-  return { inserted, updated, dropped }
+  await breadcrumb('dentist-cron', 'persist:done', {
+    candidates: candidates.length, inserted, updated, dropped,
+    ...dropReasons,
+  })
+  return { inserted, updated, dropped, dropReasons }
 }
 
+/**
+ * Classify why a lead failed the AND gate. Order matters — first matching
+ * reason wins. The counter is surfaced verbatim in the cron response so
+ * founder can see "dropped 35 for no-website" without rummaging through
+ * pipeline_runs.
+ */
 function whyDropped(lead) {
   if (typeof lead.name !== 'string' || !lead.name.trim()) return 'no-name'
   if (typeof lead.phone !== 'string' || lead.phone.replace(/\D/g, '').length < 7) return 'bad-phone'
   if (typeof lead.website !== 'string' || !lead.website.trim()) return 'no-website'
-  if (!Number.isFinite(lead.pagespeed)) return 'no-pagespeed'
+  if (!Number.isFinite(lead.pagespeed)) return 'pagespeed-error'
   if (lead.pagespeed >= 50) return 'pagespeed-too-good'
   if (typeof lead.flag !== 'string' || !lead.flag.trim()) return 'no-flag'
   return 'unknown'
@@ -442,13 +452,13 @@ export default async function handler(req, res) {
     }
     const mapsRows = maps.rows
     if (mapsRows.length === 0) {
-      results.aborted = 'no-rows-with-website'
+      results.aborted = 'no-rows-from-maps'
       // Still mark the city as scraped — it had its turn even if dry.
       await markCityScraped(db, city)
       results.finishedAt = new Date()
       await db.collection(RUNS_COLLECTION).insertOne(results)
       return res.status(200).json({
-        ok: true, aborted: 'no-rows-with-website', city: results.city,
+        ok: true, aborted: 'no-rows-from-maps', city: results.city,
       })
     }
 
@@ -460,24 +470,13 @@ export default async function handler(req, res) {
     results.monthToDateInr = ledger?.total_inr ?? 0
 
     const psiKey = process.env.PAGESPEED_API_KEY
-    const badSites = await runPsiStage({ req, rows: mapsRows, apiKey: psiKey, results })
+    const allGraded = await runPsiStage({ req, rows: mapsRows, apiKey: psiKey, results })
 
-    // -------------------- Stage 3: Email --------------------
-    // Cheap projection before entering: email crawl × max targets.
-    const emailProj = projectDentistStageCostInr(EMAIL_ACTOR, Math.min(badSites.length, EMAIL_MAX_TARGETS) * 5)
-    if ((ledger?.total_inr ?? 0) + emailProj > HARD_CAP_INR) {
-      results.skippedStages.push({
-        name: 'email-scrape', reason: 'pre-stage-hard-cap',
-        currentTotalInr: ledger?.total_inr ?? 0,
-        projectedAdd: emailProj,
-      })
-      // Run AND-gate without emails — they're optional.
-      const noEmail = badSites.map((r) => ({ ...r, email: null }))
-      await persistLeads({ db, candidates: noEmail, city, results })
-    } else {
-      const withEmail = await runEmailStage({ db, req, rows: badSites, results })
-      await persistLeads({ db, candidates: withEmail, city, results })
-    }
+    // -------------------- Persist (AND gate) --------------------
+    // Email is sourced inline from the maps row (Actor's scrapeContacts).
+    // No separate email stage. AND-gate enforces required fields; dropReasons
+    // surfaces per-field accounting in the response.
+    const persist = await persistLeads({ db, candidates: allGraded, city, results })
 
     // -------------------- City rotation --------------------
     await markCityScraped(db, city)
@@ -498,7 +497,10 @@ export default async function handler(req, res) {
       budgetState: state,
       monthToDateInr: results.monthToDateInr,
       persistence: results.persistence,
-      stages: results.stages.map(({ name, items, ok, error }) => ({ name, items, ok, error })),
+      dropped: persist.dropReasons,
+      stages: results.stages.map(({ name, items, ok, error, normalized, withWebsite, withEmail, graded, psiErrors, badSites }) => ({
+        name, items, normalized, withWebsite, withEmail, graded, psiErrors, badSites, ok, error,
+      })),
       skippedStages: results.skippedStages,
     })
   } catch (err) {

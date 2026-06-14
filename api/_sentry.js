@@ -52,3 +52,23 @@ export async function captureRouteError(req, error, extra = {}) {
     // best-effort
   }
 }
+
+/**
+ * Drop a Sentry breadcrumb so debugging long-running serverless invocations is
+ * possible after the fact. No-op when Sentry is not initialized (no DSN). Use
+ * for stage entry/exit and notable counters in cron handlers.
+ *
+ * @param {string} category   stage / subsystem name, e.g. 'dentist-cron'
+ * @param {string} message    short, human-readable event
+ * @param {object} [data]     structured payload (counters, ids, etc.)
+ * @param {'info'|'warning'|'error'} [level]
+ */
+export async function breadcrumb(category, message, data = {}, level = 'info') {
+  const Sentry = await ensureInit()
+  if (!Sentry) return
+  try {
+    Sentry.addBreadcrumb({ category, message, data, level })
+  } catch {
+    // best-effort
+  }
+}

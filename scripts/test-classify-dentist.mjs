@@ -174,7 +174,7 @@ check(
 // -------------------- normalizeGoogleMapsDentist --------------------
 
 check(
-  'normalize: full row maps title/phone/website/categoryName',
+  'normalize: full row maps title/phone/website/categoryName/emails',
   (() => {
     const norm = normalizeGoogleMapsDentist({
       title: 'Bright Smiles Miami',
@@ -182,34 +182,75 @@ check(
       website: 'https://brightsmilesmiami.com',
       address: '123 Main St, Miami, FL',
       categoryName: 'Dentist',
+      emails: ['info@brightsmilesmiami.com'],
     })
     return (
       norm &&
       norm.name === 'Bright Smiles Miami' &&
       norm.phone === '(305) 555-1234' &&
       norm.website === 'https://brightsmilesmiami.com' &&
-      norm.category === 'Dentist'
+      norm.category === 'Dentist' &&
+      norm.email === 'info@brightsmilesmiami.com'
     )
   })()
 )
 
 check(
-  'normalize: no website returns null (early drop)',
-  normalizeGoogleMapsDentist({
-    title: 'Generic Dentist',
-    phone: '305-555-1234',
-  }) === null
+  'normalize: no website preserves row (website=null; AND gate drops it)',
+  (() => {
+    const norm = normalizeGoogleMapsDentist({
+      title: 'Generic Dentist',
+      phone: '305-555-1234',
+    })
+    return norm !== null && norm.name === 'Generic Dentist' && norm.website === null
+  })()
 )
 
 check(
-  'normalize: no title returns null',
+  'normalize: webResults[0].url is a website fallback',
+  (() => {
+    const norm = normalizeGoogleMapsDentist({
+      title: 'Smile',
+      phone: '305-555-1234',
+      webResults: [{ url: 'https://smile-from-search.com' }],
+    })
+    return norm && norm.website === 'https://smile-from-search.com'
+  })()
+)
+
+check(
+  'normalize: subTitle is a name fallback',
+  (() => {
+    const norm = normalizeGoogleMapsDentist({
+      subTitle: 'Backup Title Dental',
+      phone: '305-555-1234',
+      website: 'bright.com',
+    })
+    return norm && norm.name === 'Backup Title Dental'
+  })()
+)
+
+check(
+  'normalize: no title AND no subTitle AND no name → null',
   normalizeGoogleMapsDentist({
     website: 'bright.com',
   }) === null
 )
 
 check(
-  'normalize: phoneNumbers array fallback works',
+  'normalize: phones[] (newer Actor shape) fallback works',
+  (() => {
+    const norm = normalizeGoogleMapsDentist({
+      title: 'Smile',
+      website: 'smile.com',
+      phones: ['+1 305-555-9999'],
+    })
+    return norm && norm.phone === '+1 305-555-9999'
+  })()
+)
+
+check(
+  'normalize: phoneNumbers array fallback works (legacy shape)',
   (() => {
     const norm = normalizeGoogleMapsDentist({
       title: 'Smile',
@@ -241,6 +282,29 @@ check(
       categories: ['Cosmetic Dentist', 'Dental Clinic'],
     })
     return norm && norm.category === 'Cosmetic Dentist'
+  })()
+)
+
+check(
+  'normalize: emails array filtered for valid @-containing entries',
+  (() => {
+    const norm = normalizeGoogleMapsDentist({
+      title: 'Smile',
+      website: 'smile.com',
+      emails: ['junk-no-at', 'real@smile.com'],
+    })
+    return norm && norm.email === 'real@smile.com'
+  })()
+)
+
+check(
+  'normalize: missing emails array → email: null (does NOT block AND gate; email optional)',
+  (() => {
+    const norm = normalizeGoogleMapsDentist({
+      title: 'Smile',
+      website: 'smile.com',
+    })
+    return norm && norm.email === null
   })()
 )
 

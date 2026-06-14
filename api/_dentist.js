@@ -138,38 +138,72 @@ export function landsInDb(lead) {
 
 /**
  * Normalize a `compass/crawler-google-places` record into our partial lead
- * shape (pre-PSI, pre-email). Drops rows without a website (early exit; saves
- * PSI quota).
+ * shape (pre-PSI). Field-mapping reality (CEO inspection 2026-06-14):
  *
- * Returns `null` when the row is unusable (no name, no website).
+ *   - the Actor returns `title` for the business name (NOT `name`).
+ *     `subTitle` is a usable secondary fallback for branded listings.
+ *   - `website` is present only when the Google Maps profile lists one;
+ *     `webResults[0]?.url` is a usable fallback (the Actor's enriched
+ *     web-search result).
+ *   - `emails` (array, populated when `scrapeContacts: true`) supersedes the
+ *     standalone website-content-crawler stage — surface emails[0] here so
+ *     the cron can drop the separate stage entirely.
+ *
+ * We DO NOT early-drop on missing website. The AND gate (`landsInDb`) handles
+ * required-field enforcement; rows missing website get dropped there with
+ * `dropReasons['no-website']` for observability.
+ *
+ * Returns `null` only when the row has no usable name at all.
  *
  * @param {object} raw
- * @returns {{ name: string, phone: string|null, website: string, address: string|null, category: string|null }|null}
+ * @returns {{ name: string, phone: string|null, website: string|null, email: string|null, address: string|null, category: string|null }|null}
  */
 export function normalizeGoogleMapsDentist(raw = {}) {
-  const name = (raw.title || raw.name || '').trim()
+  const name = (
+    (typeof raw.title === 'string' && raw.title) ||
+    (typeof raw.name === 'string' && raw.name) ||
+    (typeof raw.subTitle === 'string' && raw.subTitle) ||
+    ''
+  ).trim()
   if (!name) return null
-  // The compass Actor exposes the place's website under several possible
-  // fields depending on scrape mode. Prefer `website` (the canonical URL),
-  // fall back to `url` (Google Maps URL — not useful as the site itself —
-  // so we explicitly DO NOT use it; the lead is dropped instead).
-  const website = (raw.website || '').trim()
-  if (!website) return null
-  // Phone normalization: the Actor returns either `phone` (single) or
-  // `phoneUnformatted` (digits only) or `phoneNumbers` (array).
+
+  // Website: prefer Actor's `website` field, fall back to webResults enrichment.
+  // No early drop — AND gate enforces required-field. null = drop downstream.
+  let website = null
+  if (typeof raw.website === 'string' && raw.website.trim()) {
+    website = raw.website.trim()
+  } else if (Array.isArray(raw.webResults) && raw.webResults.length > 0) {
+    const w = raw.webResults[0]
+    if (w && typeof w.url === 'string' && w.url.trim()) {
+      website = w.url.trim()
+    }
+  }
+
+  // Phone normalization: the Actor returns either `phone` (single string),
+  // `phoneUnformatted` (digits only), `phones` (array — newer Actor shape),
+  // or `phoneNumbers` (array — older shape).
   const phone =
     (typeof raw.phone === 'string' && raw.phone) ||
     (typeof raw.phoneUnformatted === 'string' && raw.phoneUnformatted) ||
-    (Array.isArray(raw.phoneNumbers) && raw.phoneNumbers[0]) ||
+    (Array.isArray(raw.phones) && typeof raw.phones[0] === 'string' && raw.phones[0]) ||
+    (Array.isArray(raw.phoneNumbers) && typeof raw.phoneNumbers[0] === 'string' && raw.phoneNumbers[0]) ||
     null
+
+  // Email: surface Actor's own contact extraction. `emails` is populated when
+  // input.scrapeContacts === true. Filter junk (must contain '@').
+  let email = null
+  if (Array.isArray(raw.emails)) {
+    const first = raw.emails.find((e) => typeof e === 'string' && e.includes('@'))
+    if (first) email = first.trim().toLowerCase()
+  }
+
   const address = (raw.address || raw.street || null) || null
-  // categoryName is what compass calls the primary category; `categories` is
-  // the array of all categories.
   const category =
     raw.categoryName ||
     (Array.isArray(raw.categories) && raw.categories[0]) ||
     null
-  return { name, phone, website, address, category }
+
+  return { name, phone, website, email, address, category }
 }
 
 // -------------------- PageSpeed grading --------------------
