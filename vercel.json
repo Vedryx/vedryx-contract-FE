@@ -80,6 +80,15 @@
   "functions": {
     "api/lead-scrape-cron.js": {
       "maxDuration": 300
+    },
+    "api/dentist-scrape-cron.js": {
+      "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/dentist-scrape-cron",
+      "schedule": "30 20 * * *"
+    }
+  ]
 }
