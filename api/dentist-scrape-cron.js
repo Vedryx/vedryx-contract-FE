@@ -70,7 +70,15 @@ const LEDGER_COLLECTION = 'pipeline_cost_ledger'
 //     STAGE_TIMEOUT_MS of 60s and blowing the Vercel 300s hard cap.
 //   - Cut MAPS_PER_SEARCH 40 → 20 (60 places/run). PSI concurrency raised
 //     8 → 16 separately. New math: maps ~80s + PSI ~57s + persist ~20s ≈ 160s.
-const MAPS_PER_SEARCH = 40
+// Iteration 8 revert (2026-06-14, pulse-local-dentist-cron/eng-005):
+//   - PR #47 bumped MAPS_PER_SEARCH 20 → 40 (iter-7) chasing more leads/run.
+//     Re-hit FUNCTION_INVOCATION_TIMEOUT at 301s. PSI's real-world throughput
+//     is capped by PageSpeed API rate limits, not just our concurrency math —
+//     so doubling input volume doubled PSI wall-clock back over the 300s cap.
+//   - Revert to iter-6 proven-working state: 20/search → 60 places/run, ~7
+//     leads/run survives the AND gate. Volume scaling must come from
+//     parallelizing across cities/nights, not from raising per-search count.
+const MAPS_PER_SEARCH = 20
 const MAPS_MAX_PLACES = MAPS_PER_SEARCH * 3 // ledger projection ceiling
 
 // Per-stage wall-clock budgets. Vercel Hobby caps function at 300s.
