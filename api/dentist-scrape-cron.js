@@ -1,9 +1,9 @@
 // Nightly US dentist scrape cron. Hit by Vercel Cron at 20:30 UTC (02:00 IST).
 //
 // Pipeline (one city per night, oldest last_scraped first):
-//   1. Apify compass/crawler-google-places → ~360 raw dentist places for city
-//      (3 search strings × 120/search). Actor's own `scrapeContacts: true`
-//      surfaces emails inline; no separate email-crawl stage.
+//   1. Apify compass/crawler-google-places → ~60 raw dentist places for city
+//      (3 search strings × 20/search). `scrapeContacts: false` — email is a
+//      pass-through from Google Maps listing data when present.
 //   2. PSI mobile-perf grade  → drop dentists whose site scores >= 50
 //   3. Strict AND gate (see api/_dentist.js#landsInDb)
 //   4. Upsert into pulse_local_leads, dedup by phone
@@ -63,7 +63,14 @@ const LEDGER_COLLECTION = 'pipeline_cost_ledger'
 //     244s wall-clock. Drop to 40/search → 120 places/run, ~120-150s total,
 //     fits comfortably under the 235s waitForFinish. Expected ~20-30 leads/
 //     city/night survive the AND gate.
-const MAPS_PER_SEARCH = 40
+// Iteration 6 fix (2026-06-14, pulse-local-dentist-cron/eng-003):
+//   - Phoenix retest with scrapeContacts: false hit FUNCTION_INVOCATION_TIMEOUT
+//     at 301s. Apify maps finished in 146s (119 items), but PSI at concurrency
+//     8 needed ~223s for 119 sites at 15s avg — far exceeding `psi-grade`
+//     STAGE_TIMEOUT_MS of 60s and blowing the Vercel 300s hard cap.
+//   - Cut MAPS_PER_SEARCH 40 → 20 (60 places/run). PSI concurrency raised
+//     8 → 16 separately. New math: maps ~80s + PSI ~57s + persist ~20s ≈ 160s.
+const MAPS_PER_SEARCH = 20
 const MAPS_MAX_PLACES = MAPS_PER_SEARCH * 3 // ledger projection ceiling
 
 // Per-stage wall-clock budgets. Vercel Hobby caps function at 300s.
@@ -80,12 +87,26 @@ const MAPS_MAX_PLACES = MAPS_PER_SEARCH * 3 // ledger projection ceiling
 //     PSI is concurrency-bounded (8 in flight, 200ms inter-batch); in
 //     production runs after the AND-gate it processes far fewer rows than
 //     the raw maps haul, so 60s remains adequate for the common case.
+// Iteration 6 fix (2026-06-14, pulse-local-dentist-cron/eng-003):
+//   - Phoenix retest: PSI on 119 sites @ concurrency 8 needed ~223s but
+//     `psi-grade` budget was 60s → STAGE_TIMEOUT plus Vercel 300s death.
+//   - Volume cut to 60 places + PSI concurrency 8→16 (below) drops PSI to
+//     ~57s. Rebudget: maps 180s (80s actual + 100s safety), psi 100s
+//     (57s actual + 43s safety). Sum 280s under 300s hard cap.
 const STAGE_TIMEOUT_MS = {
-  'maps-scrape': 240_000,
-  'psi-grade': 60_000,
+  'maps-scrape': 180_000,
+  'psi-grade': 100_000,
 }
 
 const MAPS_ACTOR = 'compass/crawler-google-places'
+
+// PSI concurrency. Iter 6 (pulse-local-dentist-cron/eng-003): bumped 8 → 16.
+// At ~15s Lighthouse avg per site, 60 sites / 16 concurrent ≈ 57s — fits
+// `psi-grade` STAGE_TIMEOUT of 100s with 40s safety. PSI daily quota is 25K
+// and per-IP throttle ~50 RPS, so 16 in flight + 200ms inter-batch stays
+// well within both ceilings. If we ever raise volume back up, reconsider.
+const PSI_CONCURRENCY = 16
+const PSI_DELAY_MS = 200
 
 function classifyActorError(message = '') {
   const m = String(message)
@@ -210,8 +231,8 @@ async function runMapsStage({ db, req, city, results }) {
  * through with `pagespeed: null` so persistLeads can count them as
  * `no-website` drops with honest per-field accounting.
  *
- * Concurrency 8 with 200ms inter-batch delay stays well within 25K/day quota
- * and the ~50 RPS per-IP throttle.
+ * Concurrency (PSI_CONCURRENCY) with 200ms inter-batch delay stays well
+ * within 25K/day quota and the ~50 RPS per-IP throttle.
  */
 async function runPsiStage({ req, rows, apiKey, results }) {
   const stageName = 'psi-grade'
@@ -244,7 +265,7 @@ async function runPsiStage({ req, rows, apiKey, results }) {
         const psi = await gradeWebsiteWithPsi(row.website, apiKey, { timeoutMs: 30_000 })
         return { ...row, pagespeed: psi.score, flag: psi.flag, psiError: psi.error }
       },
-      { concurrency: 8, delayMs: 200 }
+      { concurrency: PSI_CONCURRENCY, delayMs: PSI_DELAY_MS }
     )
   } catch (err) {
     const errMsg = String(err?.message || err)
