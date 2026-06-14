@@ -13,6 +13,39 @@
 
 import { runActor, USD_TO_INR } from './_apify.js'
 
+// -------------------- Preview-aware collection routing --------------------
+//
+// Vercel preview deploys carry PREVIEW_MODE=true (env var pushed via the
+// Vercel MCP). When set, ALL Mongo collection names this pipeline writes to
+// are suffixed `_preview` so a preview/PR test cannot pollute production data.
+//
+// Use this helper EVERYWHERE the cron touches Mongo. Hard-coded collection
+// names elsewhere in the dentist pipeline are a bug.
+//
+// Note: `pipeline_cost_ledger` IS preview-routed for symmetry — a preview
+// burst that hits Apify still costs real money and should be ledgered, but
+// against the preview ledger so it cannot trip the prod hard-cap gate by
+// itself. (Same actor calls — Apify doesn't have a sandbox — but logically
+// isolated for accounting.)
+//
+// `pipeline_runs` is preview-routed so prod observability stays clean.
+// `us_cities` is shared (it is a static rotation pool, not output data).
+export function getCollectionNames() {
+  const isPreview = process.env.PREVIEW_MODE === 'true'
+  const suffix = isPreview ? '_preview' : ''
+  return {
+    LEADS: `pulse_local_leads${suffix}`,
+    VALID: `valid_pulse_leads${suffix}`,
+    RUNS: `pipeline_runs${suffix}`,
+    LEDGER: `pipeline_cost_ledger${suffix}`,
+    PENDING_RUNS: `pending_scrape_runs${suffix}`,
+    // us_cities is the rotation pool — shared across preview + prod so a
+    // preview run rotates the same way prod would.
+    CITIES: 'us_cities',
+    isPreview,
+  }
+}
+
 // -------------------- Actor cost shape (PPE) --------------------
 // Sized from Apify Actor marketplace pricing as of 2026-06-14. Belt+suspenders
 // against the monthly ledger gate. Founder pays a $30/mo subscription that
@@ -203,7 +236,20 @@ export function normalizeGoogleMapsDentist(raw = {}) {
     (Array.isArray(raw.categories) && raw.categories[0]) ||
     null
 
-  return { name, phone, website, email, address, category }
+  // Long-horizon identity keys (RA §5, brief §4):
+  //   - placeId: Google Place ID. Stable for ~12 months; rotates on relocation/
+  //     rebrand/DB churn. Day-to-day dedup key.
+  //   - cid: numeric Customer ID. PERMANENT for verified businesses; survives
+  //     placeId rotation. Long-horizon merge key.
+  //   - fid: internal Google feature id. Treat as opaque backup.
+  // Compound unique index on (placeId, cid, fid) — partial so null fields
+  // are allowed but among-non-null values are unique.
+  const placeId = (typeof raw.placeId === 'string' && raw.placeId.trim()) || null
+  const cidRaw = raw.cid ?? null
+  const cid = cidRaw == null ? null : String(cidRaw).trim() || null
+  const fid = (typeof raw.fid === 'string' && raw.fid.trim()) || null
+
+  return { name, phone, website, email, address, category, placeId, cid, fid }
 }
 
 // -------------------- PageSpeed grading --------------------

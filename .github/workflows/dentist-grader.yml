@@ -1,0 +1,76 @@
+name: Dentist grader
+
+# Drains the pending Apify scrape runs created by the Vercel nightly
+# `api/dentist-scrape-cron` (enqueue-only) and grades unchecked leads through
+# PSI. Architectural split per pulse-local-dentist-cron/eng-006.
+#
+# Behavior:
+#   - Job A: fetch SUCCEEDED Apify runs → upsert into pulse_local_leads
+#   - Job B: grade `checked: false` rows → promote pass-AND-gate into
+#            valid_pulse_leads
+#
+# Auth: hits the prod endpoint with CRON_SECRET. Free-tier GHA. Cost = $0.
+#
+# Required repo secret (set in Settings → Secrets and variables → Actions):
+#   CRON_SECRET — same value as Vercel env var of the same name.
+#
+# For preview / PR testing, trigger manually via workflow_dispatch and pass
+# the preview URL via the `base_url` input. CEO uses this during the
+# pulse-local-dentist-cron iteration.
+
+on:
+  schedule:
+    # Every 10 min. Cheap on free-tier; each invocation < 30s.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL of the deploy to hit (defaults to prod)'
+        required: false
+        default: 'https://vedryxtech.com'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dentist-grader
+  cancel-in-progress: false
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resolve base URL
+        id: vars
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.base_url }}" ]; then
+            BASE="${{ github.event.inputs.base_url }}"
+          else
+            BASE="https://vedryxtech.com"
+          fi
+          echo "base_url=$BASE" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger grader endpoint
+        env:
+          BASE_URL: ${{ steps.vars.outputs.base_url }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::CRON_SECRET repo secret is not set"
+            exit 1
+          fi
+          echo "POSTing $BASE_URL/api/dentist-grader-cron"
+          HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" \
+            -X POST "$BASE_URL/api/dentist-grader-cron" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 290)
+          echo "HTTP $HTTP_STATUS"
+          cat response.json || true
+          echo
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::error::Grader endpoint returned $HTTP_STATUS"
+            exit 1
+          fi

@@ -184,6 +184,120 @@ export async function runActor(actorId, input, opts = {}) {
   }
 }
 
+// -------------------- Apify ASYNC run pattern --------------------
+//
+// `POST /v2/acts/<actor>/runs` returns immediately with the run document.
+// The Actor continues executing for up to its configured timeout (minutes /
+// hours, no 5-min sync cap). Callers persist the runId + datasetId and poll
+// `GET /v2/actor-runs/<runId>` later (from a separate cron) for status.
+//
+// Pattern lives here (not in the cron) so other pipelines can reuse it.
+// Pricing is identical to sync — Apify bills compute/PPE consumed.
+//
+// Returns: { runId, datasetId, status } — status is typically 'READY' on
+// initial creation, transitions to 'RUNNING' within seconds.
+export async function startActorRunAsync(actorId, input, opts = {}) {
+  const token = getApifyToken()
+  const memoryMbytes = opts.memoryMbytes ?? 1024
+  const slug = actorId.replace('/', '~')
+  const params = new URLSearchParams({
+    token,
+    memory: String(memoryMbytes),
+  })
+  if (typeof opts.maxItems === 'number' && Number.isFinite(opts.maxItems) && opts.maxItems > 0) {
+    params.set('maxItems', String(Math.floor(opts.maxItems)))
+  }
+  const url = `${APIFY_BASE}/acts/${slug}/runs?${params.toString()}`
+
+  // Short client timeout — the async endpoint returns in ~1-3s. If the API
+  // is unhealthy we want to fail fast and let the next cron tick retry.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), opts.startTimeoutMs ?? 20_000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Apify async start ${actorId} returned ${res.status}: ${text.slice(0, 200)}`)
+    }
+    const json = await res.json()
+    const data = json?.data || {}
+    const runId = data.id || ''
+    const datasetId = data.defaultDatasetId || ''
+    const status = data.status || 'UNKNOWN'
+    if (!runId || !datasetId) {
+      throw new Error(`Apify async start ${actorId} missing runId/datasetId in response`)
+    }
+    return { runId, datasetId, status, raw: data }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * GET /v2/actor-runs/<runId> — fetch run status + cost. Used by the grader
+ * cron to drain pending runs. Returns the unwrapped `data` field plus a
+ * normalized `usageTotalUsd` figure for the ledger.
+ */
+export async function getActorRunStatus(runId, opts = {}) {
+  if (!runId) throw new Error('getActorRunStatus: runId required')
+  const token = getApifyToken()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000)
+  try {
+    const res = await fetch(`${APIFY_BASE}/actor-runs/${runId}?token=${encodeURIComponent(token)}`, {
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Apify run-status ${runId} returned ${res.status}: ${text.slice(0, 200)}`)
+    }
+    const json = await res.json()
+    const data = json?.data || {}
+    const status = data.status || 'UNKNOWN'
+    const usageTotalUsd = typeof data.usageTotalUsd === 'number' && Number.isFinite(data.usageTotalUsd)
+      ? data.usageTotalUsd
+      : null
+    return { status, usageTotalUsd, datasetId: data.defaultDatasetId || '', raw: data }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Fetch dataset items for a finished run. Async pattern — no compute cost,
+ * just storage I/O. Pagination via limit/offset, but our nightly runs cap
+ * around 60-200 items so a single fetch suffices.
+ */
+export async function fetchDatasetItems(datasetId, opts = {}) {
+  if (!datasetId) throw new Error('fetchDatasetItems: datasetId required')
+  const token = getApifyToken()
+  const limit = opts.limit ?? 1000
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000)
+  try {
+    const params = new URLSearchParams({ token, limit: String(limit), clean: '1' })
+    const res = await fetch(`${APIFY_BASE}/datasets/${datasetId}/items?${params.toString()}`, {
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Apify dataset ${datasetId} returned ${res.status}: ${text.slice(0, 200)}`)
+    }
+    const items = await res.json()
+    if (!Array.isArray(items)) {
+      throw new Error(`Apify dataset ${datasetId} returned non-array payload`)
+    }
+    return { items }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // -------------------- ICP routing --------------------
 
 // Strict regex-bounded list. Source: cmo.md §6 + RA §6.5 (tightened 2026-06-12).
@@ -583,7 +697,7 @@ export function projectStageCostInr(actorId, itemCount) {
  * @param {string} actorId
  * @param {object} args - { runUsageUsd, itemCount } from runActor()
  */
-export async function recordActorCost(db, actorId, args) {
+export async function recordActorCost(db, actorId, args, opts = {}) {
   // Back-compat: callers that pass a bare itemCount (the pre-rework signature)
   // are routed through the conservative projector so we still bill SOMETHING
   // rather than silently zeroing out. Tests cover the new shape.
@@ -604,7 +718,10 @@ export async function recordActorCost(db, actorId, args) {
   const inr = usd * USD_TO_INR
   const now = new Date()
   const ym = ledgerMonthKey(now)
-  const ledger = db.collection('pipeline_cost_ledger')
+  // Preview-aware: caller may override the ledger collection name. Defaults
+  // to `pipeline_cost_ledger` for prod / LinkedIn-pipeline back-compat.
+  const ledgerName = opts.ledgerCollection || 'pipeline_cost_ledger'
+  const ledger = db.collection(ledgerName)
 
   const actorKey = actorId.replace(/\W/g, '_')
   const source = typeof runUsageUsd === 'number' ? 'measured' : 'projected'
