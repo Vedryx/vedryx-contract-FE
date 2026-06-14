@@ -123,6 +123,15 @@ export async function runActor(actorId, input, opts = {}) {
   if (typeof opts.maxItems === 'number' && Number.isFinite(opts.maxItems) && opts.maxItems > 0) {
     params.set('maxItems', String(Math.floor(opts.maxItems)))
   }
+  // Apify's run-sync-get-dataset-items endpoint defaults `waitForFinish` to 120s
+  // server-side. Without an explicit value, the endpoint returns whatever is in
+  // the dataset at 120s even when the Actor is still producing items — which
+  // surfaces as the `no-rows-from-maps` abort at ~124s for stages that legitimately
+  // need longer (e.g. maps-scraper). Match the server's wait window to the
+  // client's AbortController timeout, minus a 5s buffer so the client times out
+  // cleanly if Apify itself hangs rather than the other way round.
+  const waitForFinishSec = Math.max(60, Math.floor(timeoutMs / 1000) - 5)
+  params.set('waitForFinish', String(waitForFinishSec))
   const url = `${APIFY_BASE}/acts/${slug}/run-sync-get-dataset-items?${params.toString()}`
 
   const controller = new AbortController()
