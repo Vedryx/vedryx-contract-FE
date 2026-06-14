@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isWebglAvailable, reportWebglUnavailable } from '../../../utils/webglSupport.js'
 
 function getSceneLayout(width) {
   if (width < 520) {
@@ -22,6 +23,17 @@ export function TechUniverse() {
   useEffect(() => {
     const mount = mountRef.current
     if (!mount) return undefined
+
+    // WebGL feature-detect (Sentry VEDRYX-CORE-WEB-2). On browsers that
+    // can't produce a WebGL context, skip Three.js entirely — the section
+    // still ships its accessible aria-label describing the stack, and the
+    // surrounding gradient ring (`.universe::after`) keeps the section
+    // visually anchored. No crash, no JS evaluation cost.
+    if (!isWebglAvailable()) {
+      reportWebglUnavailable('feature-detect-failed', { surface: 'stack-universe' })
+      return undefined
+    }
+
     let cleanupScene = null
     let cancelled = false
 
@@ -36,7 +48,19 @@ export function TechUniverse() {
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200)
     camera.position.set(0, 9, 42)
     camera.lookAt(0, 0, 0)
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
+    // Driver-level construction can still throw even after a passing
+    // feature-detect. Catch, breadcrumb at INFO, bail — leaves the
+    // gradient ring visible, page continues to render.
+    let renderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
+    } catch (err) {
+      reportWebglUnavailable('renderer-construct-threw', {
+        surface: 'stack-universe',
+        message: err?.message,
+      })
+      return
+    }
     renderer.setClearColor(0x000000, 0)
     mount.appendChild(renderer.domElement)
 
