@@ -55,7 +55,15 @@ const LEDGER_COLLECTION = 'pipeline_cost_ledger'
 // strings = ~360 raw places. Iteration 0 used 40 → too few survived field-
 // availability gates (only ~30-50% of Google profiles list a website at all).
 // Apify cost stays small (~$0.20/run vs prior ~$0.05).
-const MAPS_PER_SEARCH = 120
+//
+// Iteration 4 fix (2026-06-14, pulse-local-dentist-cron/eng-001):
+//   - 120/search × 3 + scrapeContacts: true needs ~300-400s to FINISH. Apify's
+//     `run-sync-get-dataset-items` only returns items on Actor finish, not on
+//     `waitForFinish` timeout — so our 235s wait window returned empty after
+//     244s wall-clock. Drop to 40/search → 120 places/run, ~120-150s total,
+//     fits comfortably under the 235s waitForFinish. Expected ~20-30 leads/
+//     city/night survive the AND gate.
+const MAPS_PER_SEARCH = 40
 const MAPS_MAX_PLACES = MAPS_PER_SEARCH * 3 // ledger projection ceiling
 
 // Per-stage wall-clock budgets. Vercel Hobby caps function at 300s.
