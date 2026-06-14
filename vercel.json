@@ -82,6 +82,9 @@
       "maxDuration": 300
     },
     "api/dentist-scrape-cron.js": {
+      "maxDuration": 60
+    },
+    "api/dentist-grader-cron.js": {
       "maxDuration": 300
     }
   },
