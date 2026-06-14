@@ -120,7 +120,14 @@ async function runMapsStage({ db, req, city, results }) {
     locationQuery: `${city.city}, ${city.state}, USA`,
     maxCrawledPlacesPerSearch: MAPS_PER_SEARCH,
     language: 'en',
-    scrapeContacts: true,
+    // Iteration 5 (pulse-local-dentist-cron/eng-002): false. `scrapeContacts: true`
+    // fires a per-place website crawl that adds 1-2s/place — at 120 places that
+    // pushed total wall-clock past 244s and Apify's sync endpoint returned empty
+    // before the Actor finished. `website` and `phone` come from Google's Maps
+    // listing data, NOT from the contact crawl, so the founder's AND gate
+    // (name + phone + website + score + flag) stays satisfied. Email becomes
+    // null for all rows — acceptable per founder spec (email is OPTIONAL).
+    scrapeContacts: false,
     exportPlaceUrls: false,
     maxTotalChargeUsd: DENTIST_PER_RUN_MAX_USD[MAPS_ACTOR],
   }
