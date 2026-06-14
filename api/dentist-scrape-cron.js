@@ -58,12 +58,23 @@ const LEDGER_COLLECTION = 'pipeline_cost_ledger'
 const MAPS_PER_SEARCH = 120
 const MAPS_MAX_PLACES = MAPS_PER_SEARCH * 3 // ledger projection ceiling
 
-// Per-stage wall-clock budgets. Vercel Hobby caps function at 300s. PSI is
-// concurrency-bounded; total budget below 270s leaves headroom for Mongo
-// writes and ledger updates.
+// Per-stage wall-clock budgets. Vercel Hobby caps function at 300s.
+//
+// Iteration 2 fix (2026-06-14, pulse-local-dentist-cron/cto-003):
+//   - LA cron run aborted at 120s with `no-rows-from-maps`, but the Apify
+//     Actor was still running and the dataset already held 41+ items. The
+//     AbortController fired before the Actor finished scraping its ~360
+//     places (120/search × 3 search strings) with `scrapeContacts: true`.
+//   - Raise `maps-scrape` 120s → 240s. The Actor needs more wall-clock for
+//     the larger volume bumped in iter-1.
+//   - Drop `psi-grade` 120s → 60s so the additive ceiling stays within the
+//     Vercel Hobby maxDuration of 300s (240 + 60 = 300, exactly the cap).
+//     PSI is concurrency-bounded (8 in flight, 200ms inter-batch); in
+//     production runs after the AND-gate it processes far fewer rows than
+//     the raw maps haul, so 60s remains adequate for the common case.
 const STAGE_TIMEOUT_MS = {
-  'maps-scrape': 120_000,
-  'psi-grade': 120_000,
+  'maps-scrape': 240_000,
+  'psi-grade': 60_000,
 }
 
 const MAPS_ACTOR = 'compass/crawler-google-places'
