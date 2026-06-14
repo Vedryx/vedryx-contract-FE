@@ -70,7 +70,7 @@ const LEDGER_COLLECTION = 'pipeline_cost_ledger'
 //     STAGE_TIMEOUT_MS of 60s and blowing the Vercel 300s hard cap.
 //   - Cut MAPS_PER_SEARCH 40 → 20 (60 places/run). PSI concurrency raised
 //     8 → 16 separately. New math: maps ~80s + PSI ~57s + persist ~20s ≈ 160s.
-const MAPS_PER_SEARCH = 20
+const MAPS_PER_SEARCH = 40
 const MAPS_MAX_PLACES = MAPS_PER_SEARCH * 3 // ledger projection ceiling
 
 // Per-stage wall-clock budgets. Vercel Hobby caps function at 300s.
