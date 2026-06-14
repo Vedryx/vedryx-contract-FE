@@ -29,12 +29,13 @@ const LINKEDIN_STAGES = [
   { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 50, projector: projectStageCostInr },
 ]
 
-// Dentist pipeline (feat/dentist-scrape-cron, 2026-06-14). One city per night,
-// ~100 raw Google Maps places, ~80 PSI-failing dentists worst case, email crawl
-// at up to 5 pages each = 400 page units worst case.
+// Dentist pipeline (fix/dentist-scrape-fields-and-volume, 2026-06-14). One city
+// per night, 3 search strings × 120 places/search = 360 raw Google Maps places.
+// Stage 3 (separate email crawl) was collapsed — email is now inline pass-
+// through from the maps Actor's `scrapeContacts: true` output, so no extra
+// stage projection is needed.
 const DENTIST_STAGES = [
-  { name: 'dentist-maps', actorId: 'compass/crawler-google-places', maxItems: 100, projector: projectDentistStageCostInr },
-  { name: 'dentist-email', actorId: 'apify/website-content-crawler', maxItems: 400, projector: projectDentistStageCostInr },
+  { name: 'dentist-maps', actorId: 'compass/crawler-google-places', maxItems: 360, projector: projectDentistStageCostInr },
 ]
 
 const STAGES = [...LINKEDIN_STAGES, ...DENTIST_STAGES]
