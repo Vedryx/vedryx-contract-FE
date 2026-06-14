@@ -15,6 +15,7 @@ import {
   projectStageCostInr,
   HARD_CAP_INR,
 } from '../api/_apify.js'
+import { projectDentistStageCostInr } from '../api/_dentist.js'
 
 // maxItems shapes match api/lead-scrape-cron.js post-throttle (lead-quality-throttle,
 // 2026-06-12). All three actors are now upstream-filtered and seed-list-driven, so
@@ -22,11 +23,21 @@ import {
 //   core-companies:  30 seed URLs/night (Sales Lead seeds 150; cron rotates)
 //   core-employees:  100 worst-case after seniority+title+location+industry filters
 //   pulse-posts:     50 expected from 5 tightened keywords × maxPosts:10
-const STAGES = [
-  { name: 'core-companies', actorId: 'harvestapi/linkedin-company', maxItems: 30 },
-  { name: 'core-employees', actorId: 'harvestapi/linkedin-company-employees', maxItems: 100 },
-  { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 50 },
+const LINKEDIN_STAGES = [
+  { name: 'core-companies', actorId: 'harvestapi/linkedin-company', maxItems: 30, projector: projectStageCostInr },
+  { name: 'core-employees', actorId: 'harvestapi/linkedin-company-employees', maxItems: 100, projector: projectStageCostInr },
+  { name: 'pulse-posts', actorId: 'harvestapi/linkedin-post-search', maxItems: 50, projector: projectStageCostInr },
 ]
+
+// Dentist pipeline (feat/dentist-scrape-cron, 2026-06-14). One city per night,
+// ~100 raw Google Maps places, ~80 PSI-failing dentists worst case, email crawl
+// at up to 5 pages each = 400 page units worst case.
+const DENTIST_STAGES = [
+  { name: 'dentist-maps', actorId: 'compass/crawler-google-places', maxItems: 100, projector: projectDentistStageCostInr },
+  { name: 'dentist-email', actorId: 'apify/website-content-crawler', maxItems: 400, projector: projectDentistStageCostInr },
+]
+
+const STAGES = [...LINKEDIN_STAGES, ...DENTIST_STAGES]
 
 function simulate(startingLedgerInr, label) {
   console.log(`\n--- ${label} ---`)
@@ -38,7 +49,7 @@ function simulate(startingLedgerInr, label) {
   const ran = []
 
   for (const stage of STAGES) {
-    const proj = projectStageCostInr(stage.actorId, stage.maxItems)
+    const proj = stage.projector(stage.actorId, stage.maxItems)
     const projTotal = ledger + proj
     const skip = projTotal > HARD_CAP_INR
     const verdict = skip ? 'SKIP' : 'RUN'
@@ -62,10 +73,10 @@ function simulate(startingLedgerInr, label) {
 let failed = false
 
 // Sanity: per-stage projections must be > 0 for all current actors. If they
-// fall back to 0 (missing entry in ACTOR_COSTS_USD), the cap is silently
+// fall back to 0 (missing entry in cost tables), the cap is silently
 // bypassed — guard against that.
 for (const stage of STAGES) {
-  const proj = projectStageCostInr(stage.actorId, stage.maxItems)
+  const proj = stage.projector(stage.actorId, stage.maxItems)
   if (!Number.isFinite(proj) || proj <= 0) {
     console.error(`FAIL: projection for ${stage.actorId} returned ${proj}; expected positive INR`)
     failed = true
