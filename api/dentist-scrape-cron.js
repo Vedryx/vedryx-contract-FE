@@ -48,6 +48,74 @@ import {
   getCollectionNames,
 } from './_dentist.js'
 
+// -------------------- GitHub workflow_dispatch helper --------------------
+//
+// Fires `dentist-grader.yml` via the GitHub Actions workflow_dispatch API
+// immediately after enqueueing the Apify run. This removes dependency on
+// GHA free-tier cron scheduler skew (which can lag 2-8 hours). The GHA
+// cron schedule is kept as a belt-and-suspenders fallback.
+//
+// Auth: fine-grained PAT stored in GH_DISPATCH_PAT env var (Vercel secret).
+// Scope required: Actions (write) on the vedryx-contract-FE repo.
+//
+// Fire-and-forget: we do NOT await the dispatch result inline — we use a
+// 5-second timeout and log success/failure. Lead is already in
+// `pending_scrape_runs`; even if dispatch fails, GHA cron drains within
+// ~10 min on its next tick.
+//
+// Idempotency: the grader is fully dedup-safe (compound unique index on
+// placeId/cid/fid). Multiple dispatch triggers in the same window produce
+// no double-writes.
+//
+const GH_DISPATCH_OWNER = 'Vedryx'
+const GH_DISPATCH_REPO = 'vedryx-contract-FE'
+const GH_DISPATCH_WORKFLOW = 'dentist-grader.yml'
+const GH_DISPATCH_TIMEOUT_MS = 5_000
+
+async function fireGraderDispatch({ runId }) {
+  const pat = process.env.GH_DISPATCH_PAT
+  if (!pat) {
+    console.warn('[dentist-scrape-cron] GH_DISPATCH_PAT not set — skipping workflow_dispatch')
+    return { ok: false, reason: 'no-pat' }
+  }
+
+  const url = `https://api.github.com/repos/${GH_DISPATCH_OWNER}/${GH_DISPATCH_REPO}/actions/workflows/${GH_DISPATCH_WORKFLOW}/dispatches`
+  const body = JSON.stringify({ ref: 'main' })
+
+  let status
+  try {
+    const ac = new AbortController()
+    const timer = setTimeout(() => ac.abort(), GH_DISPATCH_TIMEOUT_MS)
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: ac.signal,
+      headers: {
+        Authorization: `Bearer ${pat}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body,
+    })
+    clearTimeout(timer)
+    status = res.status
+  } catch (err) {
+    const reason = err?.name === 'AbortError' ? 'timeout' : String(err?.message || err)
+    console.warn('[dentist-scrape-cron] workflow_dispatch failed:', reason, { runId })
+    return { ok: false, reason }
+  }
+
+  if (status === 204) {
+    console.log('[dentist-scrape-cron] workflow_dispatch fired OK (204)', { runId })
+    return { ok: true, status }
+  }
+
+  // 422 = workflow not on ref (dentist-grader.yml not merged to main yet)
+  // 401/403 = PAT scope wrong or expired
+  console.warn('[dentist-scrape-cron] workflow_dispatch unexpected status', status, { runId })
+  return { ok: false, status }
+}
+
 // Per-night volume. Iter 6/8 proved 20/search × 3 strings = 60 places fits
 // PSI's real-world throughput on the grader side. Volume scaling is now
 // across-cities (nightly rotation) not per-search.
@@ -232,6 +300,15 @@ export default async function handler(req, res) {
     // it but we do not re-pick this city tonight. Rotation continues.
     await markCityScraped(db, city)
 
+    // -------------------- Fire grader workflow_dispatch --------------------
+    // Kick GHA grader immediately so it starts polling the new Apify run.
+    // Fire-and-forget: 5s timeout, no inline await on result beyond logging.
+    // Belt-and-suspenders: GHA cron (*/10 * * * *) drains anyway if this fails.
+    // 422 here means dentist-grader.yml not merged to main yet — do NOT ship
+    // this cron change before merging the dentist-pipeline-split PR to main.
+    const dispatchResult = await fireGraderDispatch({ runId: enqueued.runId })
+    console.log('[dentist-scrape-cron] dispatch result', JSON.stringify(dispatchResult))
+
     // -------------------- Final state + run doc --------------------
     results.stages.push({
       name: 'maps-enqueue',
@@ -243,12 +320,14 @@ export default async function handler(req, res) {
     })
     results.runId = enqueued.runId
     results.datasetId = enqueued.datasetId
+    results.dispatchResult = dispatchResult
     results.finishedAt = new Date()
     results.durationMs = results.finishedAt - results.startedAt
     await db.collection(cols.RUNS).insertOne(results)
     await breadcrumb('dentist-cron', 'enqueue:ok', {
       runId: enqueued.runId,
       durationMs: results.durationMs,
+      dispatchOk: dispatchResult.ok,
     })
 
     return res.status(200).json({
@@ -262,7 +341,8 @@ export default async function handler(req, res) {
       budgetState: state,
       monthToDateInr: results.monthToDateInr,
       durationMs: results.durationMs,
-      message: 'Run enqueued. Grader cron will drain when SUCCEEDED.',
+      dispatchResult,
+      message: 'Run enqueued. Grader dispatch fired.',
     })
   } catch (err) {
     console.error('[dentist-scrape-cron] fatal', err)
