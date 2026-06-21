@@ -36,6 +36,35 @@ async function ensureInit() {
   return initPromise
 }
 
+/**
+ * Is this error an expected, handled AbortController timeout fired by our own
+ * stage-timeout logic (not a genuine fatal abort)?
+ *
+ * Rules:
+ *  - Must be an AbortError (name === 'AbortError' or message matches the
+ *    Node fetch "operation was aborted" string).
+ *  - Must NOT be marked fatal: true. Fatal aborts (top-level catch blocks)
+ *    represent truly unexpected failures and must still page.
+ *  - Must NOT come from an unknown origin — we only downgrade when a stage
+ *    name is present (i.e. the caller identified the context).
+ *
+ * When this returns true we downgrade from captureException → captureMessage
+ * at 'warning' level. The event still lands in Sentry for debugging but does
+ * not count against the error quota or trigger inbox noise.
+ */
+function isExpectedStageAbort(error, extra) {
+  if (extra.fatal === true) return false
+  const isAbort =
+    error?.name === 'AbortError' ||
+    /operation was aborted/i.test(String(error?.message || '')) ||
+    /aborted/i.test(String(error?.name || ''))
+  if (!isAbort) return false
+  // Only downgrade when caller supplied a stage tag — ensures we don't
+  // accidentally suppress an AbortError that slips through an untagged path.
+  const hasStageContext = Boolean(extra.stage || extra.errorKind === 'client-timeout')
+  return hasStageContext
+}
+
 export async function captureRouteError(req, error, extra = {}) {
   const Sentry = await ensureInit()
   if (!Sentry) return
@@ -44,7 +73,24 @@ export async function captureRouteError(req, error, extra = {}) {
     scope.setTag('method', req?.method || 'unknown')
     scope.setTag('source', extra.source || 'unknown')
     if (error?.code) scope.setTag('error_code', error.code)
-    Sentry.captureException(error)
+    if (extra.stage) scope.setTag('stage', extra.stage)
+    if (extra.errorKind) scope.setTag('error_kind', extra.errorKind)
+    if (extra.fatal) scope.setTag('fatal', 'true')
+
+    if (isExpectedStageAbort(error, extra)) {
+      // Handled stage-timeout abort: downgrade to warning. Not a bug —
+      // AbortController fired because Apify API was slow (or the stage
+      // ceiling was too tight). Still visible in Sentry for triage but
+      // does not create an unresolved error issue or eat error quota.
+      Sentry.captureMessage(
+        `[stage-timeout] ${extra.stage || 'unknown'}: ${error?.message || 'AbortError'}`,
+        { level: 'warning' }
+      )
+    } else {
+      // All other errors — including fatal: true, unknown origin, and any
+      // non-abort error — remain full captureException so they page.
+      Sentry.captureException(error)
+    }
   })
   try {
     await Sentry.flush(2000)

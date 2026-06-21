@@ -22,6 +22,16 @@ export async function initSentry() {
       tracesSampleRate: 0.1,
       // PII: scrub default PII. Callback form collects work email + phone.
       sendDefaultPii: false,
+      // AbortError fires on tab close, navigation cancellations, and the
+      // browser's own resource-fetch cancellations. None of these represent
+      // application bugs; they are normal browser lifecycle events.
+      // DOMException with "The user aborted a request" is the same class of
+      // event from the Fetch API in some browsers.
+      ignoreErrors: [
+        'AbortError',
+        /The user aborted a request/i,
+        /operation was aborted/i,
+      ],
       beforeBreadcrumb(breadcrumb) {
         if (breadcrumb.category === 'fetch' || breadcrumb.category === 'xhr') {
           if (breadcrumb.data?.url?.includes('/api/callback')) {
