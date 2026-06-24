@@ -4,6 +4,7 @@ import App from './App.jsx'
 import './styles/globals.css'
 import { initSentry } from './utils/sentry.js'
 import { initPostHog, track } from './utils/posthog.js'
+import { registerWebMcpTools } from './utils/webmcp.js'
 
 // Fire-and-forget. No-op when VITE_SENTRY_DSN is unset.
 initSentry()
@@ -12,6 +13,8 @@ initSentry()
 initPostHog().then(() => {
   track('landing_view', { site: 'vedryx-core-web' })
 })
+
+registerWebMcpTools()
 
 // Global click delegation for callback CTAs — every "Request Callback"
 // anchor on the site points at #submit. One listener covers nav, hero,

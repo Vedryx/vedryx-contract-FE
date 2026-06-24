@@ -58,6 +58,15 @@
       ]
     },
     {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Vary",
+          "value": "Accept"
+        }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {
@@ -71,9 +80,31 @@
       ]
     }
   ],
+  "routes": [
+    {
+      "src": "^/$",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": "(?<accept>.*text/markdown.*)"
+        }
+      ],
+      "headers": {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "Vary": "Accept",
+        "Cache-Control": "public, max-age=3600"
+      },
+      "dest": "/index.md"
+    },
+    {
+      "src": "^/index\\.md$",
+      "status": 404
+    }
+  ],
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|.*\\.md$|\\.well-known/).*)",
       "destination": "/index.html"
     }
   ],
