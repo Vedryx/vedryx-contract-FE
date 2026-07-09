@@ -15,8 +15,8 @@ Vedryx helps product and HR teams skip resume screening, calls, and interview sc
 
 ## Primary Pages
 
-- Home: https://vedryxtech.com/
+- Home: https://hire.vedryxtech.com/
 
 ## FAQ
 
-The homepage carries a FAQ covering the unlimited replacement guarantee, how Vedryx vets developers (multi-round interviews → full-time Vedryx employment → in-house product work before client placement), engagement length (flexible and contract-defined), IP ownership (full assignment to the client on creation), and how Vedryx Core differs from marketplaces like Toptal, Andela, and Turing (dedicated not marketplace, unlimited replacement at no extra cost, single Vedryx-to-client contract keeping PIP and severance liability off the client's books).
+The homepage carries a FAQ covering the unlimited replacement guarantee, how Vedryx vets developers (multi-round interviews → full-time Vedryx employment → in-house product work before client placement), engagement length (flexible and contract-defined), IP ownership (full assignment to the client on creation), and how Vedryx Hire differs from marketplaces like Toptal, Andela, and Turing (dedicated not marketplace, unlimited replacement at no extra cost, single Vedryx-to-client contract keeping PIP and severance liability off the client's books).

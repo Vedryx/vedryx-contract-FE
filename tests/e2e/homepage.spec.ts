@@ -22,13 +22,13 @@ test.describe('homepage SSR output', () => {
     expect(html).toContain('Replace until they perform.')
     // Hero badge and proofline must also be present pre-hydration.
     expect(html).toContain('No PIP, no severance, unlimited replacement')
-    expect(html).toContain('72-hour replacement SLA')
+    expect(html).toContain('30-day replacement')
   })
 
   test('renders canonical URL and OG tags in head', async () => {
-    expect(html).toContain('<link rel="canonical" href="https://vedryxtech.com/"')
+    expect(html).toContain('<link rel="canonical" href="https://hire.vedryxtech.com/"')
     expect(html).toMatch(/<meta property="og:title" content="Vedryx \| Hire Dedicated Remote Developers"/)
-    expect(html).toContain('<meta property="og:url" content="https://vedryxtech.com/"')
+    expect(html).toContain('<meta property="og:url" content="https://hire.vedryxtech.com/"')
     expect(html).toContain('<meta property="og:image"')
   })
 
