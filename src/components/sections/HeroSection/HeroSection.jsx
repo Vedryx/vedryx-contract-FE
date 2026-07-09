@@ -22,7 +22,7 @@ export function HeroSection() {
         </div>
         <div className="hero-proofline" aria-label="Vedryx engagement safeguards">
           <span>Unlimited replacement</span>
-          <span>72-hour replacement SLA</span>
+          <span>30-day replacement</span>
           <span>No PIP or severance liability</span>
         </div>
       </div>

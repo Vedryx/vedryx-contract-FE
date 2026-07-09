@@ -1,7 +1,7 @@
 {
   "ci": {
     "collect": {
-      "url": ["https://vedryxtech.com/"],
+      "url": ["https://hire.vedryxtech.com/"],
       "numberOfRuns": 3,
       "settings": {
         "preset": "desktop",

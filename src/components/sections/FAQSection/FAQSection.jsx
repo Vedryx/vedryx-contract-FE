@@ -111,7 +111,7 @@ const DEFAULT_TITLE = (
 )
 
 const DEFAULT_LEAD =
-  'The replacement promise, how we vet, who owns the code, and how Vedryx Core differs from a marketplace. Straight answers — written by the team who signs the contracts, not by marketing.'
+  'The replacement promise, how we vet, who owns the code, and how Vedryx Hire differs from a marketplace. Straight answers — written by the team who signs the contracts, not by marketing.'
 
 export function FAQSection({
   items = faqItems,

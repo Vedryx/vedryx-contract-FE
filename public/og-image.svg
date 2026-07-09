@@ -17,10 +17,10 @@
   <text x="86" y="304" fill="#eef0f8" font-family="Space Grotesk, Arial, sans-serif" font-size="74" font-weight="700">Remote Developers</text>
   <text x="86" y="372" fill="#aebfff" font-family="Hanken Grotesk, Arial, sans-serif" font-size="32" font-weight="600">India-based vetted talent for global product teams.</text>
   <g font-family="Hanken Grotesk, Arial, sans-serif" font-size="25" font-weight="700">
-    <rect x="86" y="438" width="188" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
-    <text x="116" y="473" fill="#c9d3ff">72h shortlist</text>
-    <rect x="292" y="438" width="166" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
-    <text x="322" y="473" fill="#c9d3ff">Guarantee</text>
+    <rect x="86" y="438" width="286" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
+    <text x="116" y="473" fill="#c9d3ff">30-day replacement</text>
+    <rect x="390" y="438" width="166" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
+    <text x="420" y="473" fill="#c9d3ff">Guarantee</text>
     <rect x="574" y="438" width="226" height="52" rx="26" fill="#10162b" stroke="#2a3a7a"/>
     <text x="604" y="473" fill="#c9d3ff">No PIP/severance</text>
   </g>

@@ -10,6 +10,10 @@ import { registerWebMcpTools } from './utils/webmcp.js'
 initSentry()
 
 // Fire-and-forget. No-op when VITE_POSTHOG_KEY is unset.
+// NOTE: `site: 'vedryx-core-web'` is a legacy PostHog identifier retained after
+// the "Vedryx Core" → "Vedryx Hire" brand rename (2026-07-09). Do not change it
+// without a coordinated dashboard/filter migration — existing funnels + insights
+// filter on this exact string. Brand-facing copy lives in landingContent.js.
 initPostHog().then(() => {
   track('landing_view', { site: 'vedryx-core-web' })
 })
