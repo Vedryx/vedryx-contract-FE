@@ -22,7 +22,7 @@ export const comparison = {
       ['Get matched to vetted talent', 'Interview overhead drops to fit review'],
       ['Developer starts full-time', 'Judge performance through real product work'],
       ['Not performing?', 'Vedryx replaces them at no extra cost', 'loop'],
-      ['72-hour replacement SLA', 'From your written notice, a vetted replacement shortlist within 72 hours', 'good'],
+      ['30-day replacement', 'From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 30 days. Unlimited replacements, no extra cost.', 'good'],
     ],
   },
 }
@@ -44,7 +44,7 @@ export const noRiskItems = [
 ]
 
 export const trustStats = [
-  ['72h', 'replacement SLA', 'From your written notice of dissatisfaction to a vetted replacement shortlist — within 72 hours.'],
+  ['30d', 'replacement promise', 'From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 30 days. Unlimited replacements, no extra cost.'],
   ['0', 'PIP or severance liability', 'Developers stay employed by Vedryx, so underperformance is not your employment burden.'],
   ['Full-time', 'dedicated developers', 'India-based remote developers work inside your tools, meetings, and delivery workflow.'],
 ]
@@ -138,14 +138,14 @@ export const faqItems = [
       { text: ' That is the promise. If a developer is not the right fit, Vedryx replaces them — ' },
       { text: 'at no extra cost, with no cap on the number of swaps', bold: true },
       { text: '. ' },
-      { text: '72-hour replacement SLA', bold: true },
-      { text: ': from your written notice of dissatisfaction, Vedryx delivers a vetted replacement shortlist within 72 hours. You are never locked to a hire that is not working. Specific guarantee terms are set out in your engagement contract.' },
+      { text: '30-day replacement', bold: true },
+      { text: ': From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 30 days. Unlimited replacements, no extra cost. Specific guarantee terms are set out in your engagement contract.' },
     ],
   },
   {
     q: 'How does Vedryx vet developers?',
     a: [
-      { text: 'Vedryx Core developers are not freelancers we found yesterday. Every engineer clears ' },
+      { text: 'Vedryx Hire developers are not freelancers we found yesterday. Every engineer clears ' },
       { text: 'multiple rounds of structured interviews', bold: true },
       { text: ' and is then ' },
       { text: 'hired as a full-time Vedryx employee', bold: true },
@@ -155,7 +155,7 @@ export const faqItems = [
     ],
   },
   {
-    q: 'How long is a Vedryx Core engagement?',
+    q: 'How long is a Vedryx Hire engagement?',
     a: [
       { text: 'Engagements are ' },
       { text: 'flexible and shaped around the work', bold: true },
@@ -171,11 +171,11 @@ export const faqItems = [
     ],
   },
   {
-    q: 'How is Vedryx Core different from Toptal, Andela, or Turing?',
+    q: 'How is Vedryx Hire different from Toptal, Andela, or Turing?',
     a: [
       { text: 'Three differences clients consistently call out. ' },
       { text: 'One: dedicated, not marketplace', bold: true },
-      { text: ' — Vedryx Core engagements are full-time monthly placements, not hourly gigs. ' },
+      { text: ' — Vedryx Hire engagements are full-time monthly placements, not hourly gigs. ' },
       { text: 'Two: unlimited replacement at no extra cost', bold: true },
       { text: ' — Toptal and Turing typically charge for re-matching or impose multi-week re-vetting cycles. ' },
       { text: 'Three: a single Vedryx-to-client contract', bold: true },
