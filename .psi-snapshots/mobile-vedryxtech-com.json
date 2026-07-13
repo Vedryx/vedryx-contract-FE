@@ -1,38 +1,38 @@
 {
   "url": "https://vedryxtech.com/",
   "strategy": "mobile",
-  "fetched_at": "2026-07-06T12:44:53.479Z",
+  "fetched_at": "2026-07-13T12:00:17.472Z",
   "lighthouse_version": "13.4.0",
   "categories": {
-    "performance": 58,
-    "accessibility": 99,
+    "performance": 93,
+    "accessibility": 95,
     "best-practices": 100,
     "seo": 100
   },
   "audits": {
     "largest-contentful-paint": {
-      "score": 0.08,
-      "display_value": "6.7 s"
+      "score": 0.88,
+      "display_value": "2.6 s"
     },
     "cumulative-layout-shift": {
       "score": 1,
       "display_value": "0"
     },
     "total-blocking-time": {
-      "score": 0.79,
-      "display_value": "300 ms"
+      "score": 1,
+      "display_value": "0 ms"
     },
     "speed-index": {
-      "score": 0.5,
-      "display_value": "5.8 s"
+      "score": 0.92,
+      "display_value": "3.2 s"
     },
     "first-contentful-paint": {
-      "score": 0.25,
-      "display_value": "3.9 s"
+      "score": 0.65,
+      "display_value": "2.6 s"
     },
     "unused-javascript": {
-      "score": 0,
-      "display_value": "Est savings of 312 KiB"
+      "score": 0.5,
+      "display_value": "Est savings of 150 KiB"
     },
     "unminified-javascript": {
       "score": 1,
@@ -43,7 +43,7 @@
       "display_value": "Root document took 0 ms"
     },
     "color-contrast": {
-      "score": 1,
+      "score": 0,
       "display_value": null
     },
     "image-alt": {
