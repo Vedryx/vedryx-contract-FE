@@ -1,10 +1,10 @@
 {
   "url": "https://vedryxtech.com/",
   "strategy": "desktop",
-  "fetched_at": "2026-07-27T12:20:50.603Z",
-  "lighthouse_version": "13.4.0",
+  "fetched_at": "2026-08-03T12:20:53.867Z",
+  "lighthouse_version": "13.4.1",
   "categories": {
-    "performance": 99,
+    "performance": 100,
     "accessibility": 95,
     "best-practices": 100,
     "seo": 100
@@ -27,12 +27,12 @@
       "display_value": "0.7 s"
     },
     "first-contentful-paint": {
-      "score": 0.97,
+      "score": 0.98,
       "display_value": "0.7 s"
     },
     "unused-javascript": {
       "score": 0.5,
-      "display_value": "Est savings of 151 KiB"
+      "display_value": "Est savings of 150 KiB"
     },
     "unminified-javascript": {
       "score": 1,
