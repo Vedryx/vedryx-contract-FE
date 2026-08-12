@@ -19,10 +19,10 @@ test.describe('homepage SSR output', () => {
 
   test('renders hero copy in the SSR HTML', async () => {
     expect(html).toContain('Try vetted developers.')
-    expect(html).toContain('Replace until they perform.')
+    expect(html).toContain('Replace — without taking on the full burden of restarting the process.')
     // Hero badge and proofline must also be present pre-hydration.
     expect(html).toContain('No PIP, no severance, unlimited replacement')
-    expect(html).toContain('30-day replacement')
+    expect(html).toContain('60-day replacement')
   })
 
   test('renders canonical URL and OG tags in head', async () => {

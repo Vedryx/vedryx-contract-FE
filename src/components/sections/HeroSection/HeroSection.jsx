@@ -8,12 +8,12 @@ export function HeroSection() {
       <div className="hero-veil" />
       <div className="wrap">
         <div className="hero-badge"><span className="dot" /> No PIP, no severance, unlimited replacement</div>
-        <h1 className="display" aria-label="Try vetted developers. Replace until they perform.">
+        <h1 className="display hero-title-long" aria-label="Try vetted developers. Replace — without taking on the full burden of restarting the process.">
           <span className="ln"><span>Try vetted developers.</span></span>
-          <span className="ln"><span>Replace until they perform.</span></span>
+          <span className="ln"><span>Replace — without taking on the full burden of restarting the process.</span></span>
         </h1>
         <p className="lead hero-sub">
-          <span className="hero-sub-desktop">Vedryx removes the hiring drag of resume screening, calls, and interview scheduling. If a developer does not perform, Vedryx replaces them at no extra cost, as many times as needed, while you avoid PIP and severance liability.</span>
+          <span className="hero-sub-desktop">Vedryx removes the hiring drag of resume screening, calls, and interview scheduling. If a developer does not perform, Vedryx replaces them at no extra cost, while you avoid PIP and severance liability.</span>
           <span className="hero-sub-mobile">Skip resume screening and interview drag. Get vetted developers, then replace underperformers at no extra cost.</span>
         </p>
         <div className="hero-actions">
@@ -22,7 +22,7 @@ export function HeroSection() {
         </div>
         <div className="hero-proofline" aria-label="Vedryx engagement safeguards">
           <span>Unlimited replacement</span>
-          <span>30-day replacement</span>
+          <span>60-day replacement</span>
           <span>No PIP or severance liability</span>
         </div>
       </div>

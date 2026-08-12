@@ -22,7 +22,7 @@ export const comparison = {
       ['Get matched to vetted talent', 'Interview overhead drops to fit review'],
       ['Developer starts full-time', 'Judge performance through real product work'],
       ['Not performing?', 'Vedryx replaces them at no extra cost', 'loop'],
-      ['30-day replacement', 'From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 30 days. Unlimited replacements, no extra cost.', 'good'],
+      ['60-day replacement', 'From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 60 days. Unlimited replacements, no extra cost.', 'good'],
     ],
   },
 }
@@ -44,7 +44,7 @@ export const noRiskItems = [
 ]
 
 export const trustStats = [
-  ['30d', 'replacement promise', 'From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 30 days. Unlimited replacements, no extra cost.'],
+  ['60d', 'replacement promise', 'From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 60 days. Unlimited replacements, no extra cost.'],
   ['0', 'PIP or severance liability', 'Developers stay employed by Vedryx, so underperformance is not your employment burden.'],
   ['Full-time', 'dedicated developers', 'India-based remote developers work inside your tools, meetings, and delivery workflow.'],
 ]
@@ -138,8 +138,8 @@ export const faqItems = [
       { text: ' That is the promise. If a developer is not the right fit, Vedryx replaces them — ' },
       { text: 'at no extra cost, with no cap on the number of swaps', bold: true },
       { text: '. ' },
-      { text: '30-day replacement', bold: true },
-      { text: ': From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 30 days. Unlimited replacements, no extra cost. Specific guarantee terms are set out in your engagement contract.' },
+      { text: '60-day replacement', bold: true },
+      { text: ': From your written notice of dissatisfaction, Vedryx puts a vetted replacement in place within 60 days. Unlimited replacements, no extra cost. Specific guarantee terms are set out in your engagement contract.' },
     ],
   },
   {
