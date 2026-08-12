@@ -36,6 +36,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: API tests
+        run: npm run test:api
+
       - name: Build (client + SSR + prerender)
         run: npm run build
 

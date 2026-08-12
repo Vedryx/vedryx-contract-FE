@@ -1,4 +1,10 @@
 import { getDatabaseName, getMongoClient } from './_mongo.js'
+import {
+  RATE_LIMIT_COLLECTION,
+  checkRateLimit,
+  extractIp,
+  releaseRateLimitReservation,
+} from './_rateLimit.js'
 import { captureRouteError } from './_sentry.js'
 
 const REQUIRED_FIELDS = ['email', 'phone', 'role', 'summary']
@@ -27,6 +33,67 @@ function validate(payload) {
   return null
 }
 
+export async function persistCallbackRequest({ req, payload, db, captureError = captureRouteError }) {
+  const collection = db.collection('callback_requests')
+  const cleanedEmail = clean(payload.email).toLowerCase()
+  const cleanedPhone = clean(payload.phone)
+  const ip = extractIp(req)
+
+  const limit = await checkRateLimit({
+    collection: db.collection(RATE_LIMIT_COLLECTION),
+    source: 'vedryx-landing',
+    ip,
+    email: cleanedEmail,
+    phone: cleanedPhone,
+  })
+
+  if (limit.softFailed) {
+    console.warn('Callback rate limit soft-failed', limit.softFailed)
+    await captureError(req, limit.softFailed, {
+      source: 'vedryx-landing',
+      stage: 'rate_limit',
+    })
+  }
+
+  if (limit.block) {
+    return { status: limit.status, body: { ok: false, message: limit.message } }
+  }
+
+  if (limit.idempotent) {
+    return {
+      status: 200,
+      body: { ok: true, message: limit.message, idempotent: true },
+    }
+  }
+
+  try {
+    await collection.insertOne({
+      email: cleanedEmail,
+      phone: cleanedPhone,
+      company: clean(payload.company),
+      role: clean(payload.role),
+      summary: clean(payload.summary),
+      source: 'vedryx-landing',
+      status: 'new',
+      createdAt: new Date(),
+      userAgent: req.headers['user-agent'] || '',
+      ip,
+    })
+  } catch (error) {
+    try {
+      await releaseRateLimitReservation({
+        collection: db.collection(RATE_LIMIT_COLLECTION),
+        reservation: limit.reservation,
+      })
+    } catch (releaseError) {
+      error.releaseRateLimitError = releaseError
+    }
+    throw error
+  }
+
+  return { status: 200, body: { ok: true } }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
@@ -52,22 +119,8 @@ export default async function handler(req, res) {
   try {
     const client = await getMongoClient()
     const db = client.db(getDatabaseName())
-    const collection = db.collection('callback_requests')
-
-    await collection.insertOne({
-      email: clean(payload.email).toLowerCase(),
-      phone: clean(payload.phone),
-      company: clean(payload.company),
-      role: clean(payload.role),
-      summary: clean(payload.summary),
-      source: 'vedryx-landing',
-      status: 'new',
-      createdAt: new Date(),
-      userAgent: req.headers['user-agent'] || '',
-      ip: clean(req.headers['x-forwarded-for']).split(',')[0] || req.socket?.remoteAddress || '',
-    })
-
-    return res.status(200).json({ ok: true })
+    const result = await persistCallbackRequest({ req, payload, db })
+    return res.status(result.status).json(result.body)
   } catch (error) {
     console.error('Callback request failed', error)
     await captureRouteError(req, error, { source: 'vedryx-landing' })
