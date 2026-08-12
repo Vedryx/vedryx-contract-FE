@@ -13,23 +13,25 @@
 // Storage: `rate_limits` collection, one doc per IP, one per identity key.
 // Both docs carry an `expiresAt` field; a TTL index removes them automatically.
 
-const COLLECTION = 'rate_limits'
+export const RATE_LIMIT_COLLECTION = 'rate_limits'
 
 const IP_WINDOW_MS = 10 * 60 * 1000 // 10 min
 const IP_MAX = 5
 const DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 h
 
-let indexesReadyPromise
+const indexPromises = new WeakMap()
 
 async function ensureIndexes(collection) {
+  let indexesReadyPromise = indexPromises.get(collection)
   if (!indexesReadyPromise) {
     indexesReadyPromise = Promise.all([
       collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
       collection.createIndex({ key: 1 }, { unique: true }),
     ]).catch((error) => {
-      indexesReadyPromise = undefined
+      indexPromises.delete(collection)
       throw error
     })
+    indexPromises.set(collection, indexesReadyPromise)
   }
   await indexesReadyPromise
 }
@@ -48,6 +50,23 @@ function dedupeKey(source, email, phone) {
   const p = (phone || '').trim()
   if (!e) return null
   return p ? `${source}:dedupe:${e}|${p}` : `${source}:dedupe:${e}`
+}
+
+function createAttemptId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function getReturnedDocument(result) {
+  return result?.value || result
+}
+
+function asDate(value) {
+  if (value instanceof Date) return value
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  return null
 }
 
 /**
@@ -91,12 +110,12 @@ export async function checkRateLimit({ collection, source, ip, email, phone }) {
         { upsert: true, returnDocument: 'after' }
       )
 
-      const hits = Array.isArray(ipDoc?.value?.hits)
-        ? ipDoc.value.hits
-        : Array.isArray(ipDoc?.hits)
-          ? ipDoc.hits
-          : []
-      const inWindow = hits.filter((t) => t instanceof Date && t >= ipWindowStart)
+      const ipRecord = getReturnedDocument(ipDoc)
+      const hits = Array.isArray(ipRecord?.hits) ? ipRecord.hits : []
+      const inWindow = hits.filter((t) => {
+        const hitAt = asDate(t)
+        return hitAt && hitAt >= ipWindowStart
+      })
 
       if (inWindow.length > IP_MAX) {
         return {
@@ -110,10 +129,31 @@ export async function checkRateLimit({ collection, source, ip, email, phone }) {
     // --- 2. Dedupe ---
     const key = dedupeKey(source, email, phone)
     if (key) {
-      const cutoff = new Date(now.getTime() - DEDUPE_WINDOW_MS)
-      const existing = await collection.findOne({ key, createdAt: { $gte: cutoff } })
+      const expiresAt = new Date(now.getTime() + DEDUPE_WINDOW_MS)
+      const attemptId = createAttemptId()
+      const dedupeDoc = await collection.findOneAndUpdate(
+        { key },
+        [
+          {
+            $set: {
+              key,
+              wasActive: { $gt: ['$expiresAt', now] },
+              createdAt: {
+                $cond: [{ $gt: ['$expiresAt', now] }, '$createdAt', now],
+              },
+              expiresAt: {
+                $cond: [{ $gt: ['$expiresAt', now] }, '$expiresAt', expiresAt],
+              },
+              attemptId: {
+                $cond: [{ $gt: ['$expiresAt', now] }, '$attemptId', attemptId],
+              },
+            },
+          },
+        ],
+        { upsert: true, returnDocument: 'after' }
+      )
 
-      if (existing) {
+      if (getReturnedDocument(dedupeDoc)?.wasActive) {
         return {
           idempotent: true,
           message:
@@ -121,14 +161,7 @@ export async function checkRateLimit({ collection, source, ip, email, phone }) {
         }
       }
 
-      await collection.updateOne(
-        { key },
-        {
-          $setOnInsert: { key, createdAt: now },
-          $set: { expiresAt: new Date(now.getTime() + DEDUPE_WINDOW_MS) },
-        },
-        { upsert: true }
-      )
+      return { ok: true, reservation: { key, attemptId } }
     }
 
     return { ok: true }
@@ -136,4 +169,12 @@ export async function checkRateLimit({ collection, source, ip, email, phone }) {
     // Soft-fail: caller decides whether to capture; we just signal degraded.
     return { ok: true, softFailed: error }
   }
+}
+
+export async function releaseRateLimitReservation({ collection, reservation }) {
+  if (!reservation?.key || !reservation?.attemptId) return
+  await collection.deleteOne({
+    key: reservation.key,
+    attemptId: reservation.attemptId,
+  })
 }
