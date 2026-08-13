@@ -79,8 +79,8 @@ export async function captureRouteError(req, error, extra = {}) {
 
     if (isExpectedStageAbort(error, extra)) {
       // Handled stage-timeout abort: downgrade to warning. Not a bug —
-      // AbortController fired because Apify API was slow (or the stage
-      // ceiling was too tight). Still visible in Sentry for triage but
+      // AbortController fired because an upstream call was slow (or the
+      // stage ceiling was too tight). Still visible in Sentry for triage but
       // does not create an unresolved error issue or eat error quota.
       Sentry.captureMessage(
         `[stage-timeout] ${extra.stage || 'unknown'}: ${error?.message || 'AbortError'}`,
@@ -104,7 +104,7 @@ export async function captureRouteError(req, error, extra = {}) {
  * possible after the fact. No-op when Sentry is not initialized (no DSN). Use
  * for stage entry/exit and notable counters in cron handlers.
  *
- * @param {string} category   stage / subsystem name, e.g. 'dentist-cron'
+ * @param {string} category   stage / subsystem name, e.g. 'callback'
  * @param {string} message    short, human-readable event
  * @param {object} [data]     structured payload (counters, ids, etc.)
  * @param {'info'|'warning'|'error'} [level]
