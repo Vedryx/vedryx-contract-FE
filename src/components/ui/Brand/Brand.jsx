@@ -14,7 +14,7 @@ export function Brand() {
         src="/Vedryx_logo.svg"
         alt="Vedryx Logo"
         className="brand-logo"
-        width="138"
+        width="160"
         height="32"
         fetchPriority="high"
         decoding="async"
