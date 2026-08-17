@@ -1,7 +1,7 @@
 {
   "url": "https://vedryxtech.com/",
   "strategy": "mobile",
-  "fetched_at": "2026-08-10T10:14:35.907Z",
+  "fetched_at": "2026-08-17T09:38:07.525Z",
   "lighthouse_version": "13.4.1",
   "categories": {
     "performance": 93,
@@ -23,16 +23,16 @@
       "display_value": "0 ms"
     },
     "speed-index": {
-      "score": 0.94,
-      "display_value": "3.0 s"
+      "score": 0.97,
+      "display_value": "2.6 s"
     },
     "first-contentful-paint": {
-      "score": 0.65,
+      "score": 0.64,
       "display_value": "2.6 s"
     },
     "unused-javascript": {
       "score": 0.5,
-      "display_value": "Est savings of 150 KiB"
+      "display_value": "Est savings of 151 KiB"
     },
     "unminified-javascript": {
       "score": 1,
