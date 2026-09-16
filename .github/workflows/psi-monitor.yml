@@ -21,7 +21,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write       # to commit .psi-snapshots/ back to main
+  contents: write       # to commit .psi-snapshots/ to perf-history branch
   issues: write         # to open regression issues
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 15
 
     env:
-      TARGET_URLS: https://vedryxtech.com/
+      TARGET_URLS: https://hire.vedryxtech.com/
       PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
 
     steps:
@@ -55,18 +55,48 @@ jobs:
           echo "has_regression=$HAS_REG" >> "$GITHUB_OUTPUT"
 
       - name: Commit snapshot updates
+        id: commit_snapshot
+        continue-on-error: true
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .psi-snapshots
+          STAMP=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
+          SNAP_DIR=".psi-snapshots"
+          # Push snapshots to perf-history branch, never main.
+          WT_DIR=$(mktemp -d)
+          cleanup() { git worktree remove --force "$WT_DIR" 2>/dev/null || true; rm -rf "$WT_DIR"; }
+          trap cleanup EXIT
+          if git ls-remote --exit-code origin perf-history >/dev/null 2>&1; then
+            git fetch origin perf-history
+            git worktree add "$WT_DIR" origin/perf-history
+          else
+            git worktree add --orphan -b perf-history "$WT_DIR"
+          fi
+          if [ -d "$SNAP_DIR" ]; then
+            cp -r "$SNAP_DIR" "${WT_DIR}/"
+          fi
+          cd "$WT_DIR"
+          git add "$SNAP_DIR"
           if git diff --cached --quiet; then
             echo "No snapshot changes to commit."
             exit 0
           fi
-          STAMP=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
           git commit -m "chore(psi): weekly snapshot ${STAMP} [skip ci]"
-          git push origin HEAD:main
+          # Retry loop (defensive: handles concurrent pushes if any).
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/perf-history"; then
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Push rejected (attempt ${attempt}/2) — rebasing on origin/perf-history..."
+              git fetch origin perf-history
+              git rebase "origin/perf-history" || { git rebase --abort; echo "Rebase failed — aborting."; exit 1; }
+            else
+              echo "Push failed after 3 attempts."
+              exit 1
+            fi
+          done
 
       - name: Open regression issue
         if: steps.psi.outputs.has_regression == 'true'
@@ -112,7 +142,7 @@ jobs:
               }
               lines.push('');
             }
-            lines.push('Snapshots: [.psi-snapshots/](../tree/main/.psi-snapshots)');
+            lines.push('Snapshots: [.psi-snapshots/](../tree/perf-history/.psi-snapshots)');
             const body = lines.join('\n');
 
             const date = new Date().toISOString().slice(0, 10);
@@ -120,6 +150,46 @@ jobs:
 
             // De-dupe: if an open perf-regression issue already exists for
             // this week, comment instead of opening a new one.
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'perf-regression',
+              per_page: 20,
+            });
+            const existing = openIssues.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['perf-regression'],
+              });
+            }
+
+      - name: Open pipeline failure issue
+        if: always() && steps.commit_snapshot.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const date = new Date().toISOString().slice(0, 10);
+            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const title = `PSI PIPELINE FAILURE — ${date}`;
+            const body = [
+              `### PSI monitor pipeline failure`,
+              ``,
+              `The \`commit_snapshot\` step failed — PSI data was collected but not persisted to \`perf-history\`.`,
+              `**Response:** check the Actions run log for the commit/push step and rerun manually after fix.`,
+              `Run: ${runUrl}`,
+            ].join('\n');
             const { data: openIssues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
