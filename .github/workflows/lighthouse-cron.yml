@@ -8,6 +8,14 @@ name: Lighthouse weekly cron
 # minScore (null is not a number), so a separate null-gate step is added
 # below. Together these two checks guarantee the job goes red on either
 # a low score OR a missing/null score.
+#
+# STEP ORDER — critical:
+# 1. LHCI collect/assert  (continue-on-error: true — notifier must survive failures)
+# 2. Null gate            (continue-on-error: true — writes gate_failed output)
+# 3. Archive/delta/commit (guarded: skip when gate or lhci failed)
+# 4. PR comment           (if: always() + delta succeeded)
+# 5. Alert issue          (if: always() — fires on ANY failure or regression)
+# 6. Final fail step      (if: always() — exits 1 after notifications so job is red)
 on:
   schedule:
     - cron: '30 0 * * 1' # Monday 00:30 UTC = 06:00 IST
@@ -35,8 +43,10 @@ jobs:
         with:
           node-version: '20'
 
+      # continue-on-error so the notification steps below can always run.
       - name: Run Lighthouse CI (${{ matrix.form_factor }})
         id: lhci
+        continue-on-error: true
         uses: treosh/lighthouse-ci-action@v12
         with:
           configPath: .lighthouse/lighthouserc-${{ matrix.form_factor }}.json
@@ -44,29 +54,42 @@ jobs:
           temporaryPublicStorage: true
 
       # Belt-and-braces null gate. LHCI's minScore assertion only fires on a
-      # numeric value — a null score passes right through. This step parses
-      # every collected LHR and exits 1 if any category score is null OR if
-      # no LHR files were produced at all (collection failure).
+      # numeric value — a null score passes right through. This step writes
+      # gate_failed + failure_reason outputs so downstream steps can branch on
+      # them. continue-on-error keeps the job alive until the notifier fires.
       - name: Gate — fail if any score is null or collection failed
+        id: gate
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          GATE_FAILED=false
+          REASON=none
           LHR_COUNT=$(ls .lighthouseci/lhr-*.json 2>/dev/null | wc -l || echo 0)
           if [ "$LHR_COUNT" -eq 0 ]; then
-            echo "::error::No LHR files produced — LHCI collection failed entirely for ${{ matrix.form_factor }}. Check Chrome availability."
-            exit 1
-          fi
-          FAIL=0
-          for f in .lighthouseci/lhr-*.json; do
-            NULL_CATS=$(jq -r '[.categories | to_entries[] | select(.value.score == null) | .key] | join(", ")' "$f")
-            if [ -n "$NULL_CATS" ]; then
-              echo "::error::Null scores in $(basename $f) [${{ matrix.form_factor }}]: $NULL_CATS — monitoring was blind to these categories."
-              FAIL=1
+            echo "::error::No LHR files produced — LHCI collection failed entirely for ${{ matrix.form_factor }}. Check Chrome availability on the runner."
+            GATE_FAILED=true
+            REASON=collection_failed
+          else
+            FAIL=0
+            for f in .lighthouseci/lhr-*.json; do
+              NULL_CATS=$(jq -r '[.categories | to_entries[] | select(.value.score == null) | .key] | join(", ")' "$f")
+              if [ -n "$NULL_CATS" ]; then
+                echo "::error::Null scores in $(basename $f) [${{ matrix.form_factor }}]: $NULL_CATS — monitoring was blind to these categories."
+                FAIL=1
+                REASON=null_scores
+              fi
+            done
+            if [ "$FAIL" -eq 1 ]; then
+              GATE_FAILED=true
             fi
-          done
-          exit $FAIL
+          fi
+          echo "gate_failed=$GATE_FAILED" >> "$GITHUB_OUTPUT"
+          echo "failure_reason=$REASON" >> "$GITHUB_OUTPUT"
+          if [ "$GATE_FAILED" = "true" ]; then exit 1; fi
 
       - name: Archive run JSON into lighthouse-history/
         id: archive
+        if: steps.lhci.outcome == 'success' && steps.gate.outcome == 'success'
         run: |
           set -euo pipefail
           STAMP=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
@@ -84,6 +107,7 @@ jobs:
 
       - name: Compute score delta vs previous report
         id: delta
+        if: steps.lhci.outcome == 'success' && steps.gate.outcome == 'success'
         run: |
           set -euo pipefail
           DEST_DIR="lighthouse-history/${{ matrix.form_factor }}"
@@ -138,6 +162,7 @@ jobs:
           echo "has_regression=$REG" >> "$GITHUB_OUTPUT"
 
       - name: Commit history JSON
+        if: steps.lhci.outcome == 'success' && steps.gate.outcome == 'success'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -150,7 +175,9 @@ jobs:
           git commit -m "chore(lighthouse): ${{ matrix.form_factor }} report ${{ steps.archive.outputs.stamp }} [skip ci]"
           git push origin HEAD:main
 
+      # Only comment if delta was actually computed (i.e., collection + gate succeeded).
       - name: Comment delta on open PRs
+        if: always() && steps.delta.outcome == 'success'
         uses: actions/github-script@v8
         with:
           script: |
@@ -203,26 +230,84 @@ jobs:
               });
             }
 
-      # Open a GH issue on regression so the alert has a destination even
-      # when no PRs are open.
-      - name: Open regression issue
-        if: steps.delta.outputs.has_regression == 'true'
+      # Unified alert issue — fires on ANY of: collection failure, null scores,
+      # LHCI assertion failure, or score regression. Title distinguishes the
+      # failure mode so the human knows which response is needed:
+      #   "COLLECTION FAILED" → Chrome runner issue, check Actions runner
+      #   "NULL SCORES"       → partial collection, some categories missing
+      #   "ASSERT FAILURE"    → score below threshold, investigate perf
+      #   "regression"        → >5pt drop week-over-week
+      - name: Open alert issue
+        if: always() && (steps.lhci.outcome == 'failure' || steps.gate.outcome == 'failure' || steps.delta.outputs.has_regression == 'true')
         uses: actions/github-script@v8
         with:
           script: |
-            const ff = '${{ steps.delta.outputs.form_factor }}';
+            const ff = '${{ matrix.form_factor }}';
             const date = new Date().toISOString().slice(0, 10);
-            const title = `Lighthouse regression [${ff}] — ${date}`;
+            const lhciOutcome = '${{ steps.lhci.outcome }}';
+            const gateOutcome = '${{ steps.gate.outcome }}';
+            const failureReason = '${{ steps.gate.outputs.failure_reason }}';
+            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+
+            let alertType, intro;
+            if (failureReason === 'collection_failed') {
+              alertType = 'COLLECTION FAILED';
+              intro = [
+                `**Collection failed** — no LHR files produced for \`${ff}\`.`,
+                `This is a runner/Chrome issue, not a score problem. The site was not measured.`,
+                `**Response:** check the Actions run for Chrome startup errors; may need runner or timeout fix.`,
+                `Run: ${runUrl}`,
+              ].join('\n');
+            } else if (failureReason === 'null_scores') {
+              alertType = 'NULL SCORES';
+              intro = [
+                `**Null scores detected** in collected LHRs for \`${ff}\`.`,
+                `Partial collection — Chrome ran but some categories returned null. Likely timeout or navigation error.`,
+                `**Response:** check the raw LHR in the Actions artifacts; look for runtimeError field.`,
+                `Run: ${runUrl}`,
+              ].join('\n');
+            } else if (lhciOutcome === 'failure') {
+              alertType = 'ASSERT FAILURE';
+              intro = [
+                `**Score below threshold** — LHCI assertion failed for \`${ff}\`.`,
+                `At least one category score dropped below the configured minimum.`,
+                `**Response:** investigate performance regression in the run artifacts.`,
+                `Run: ${runUrl}`,
+              ].join('\n');
+            } else {
+              alertType = 'regression';
+              intro = [
+                `**Score regression** — performance dropped >5 pts week-over-week for \`${ff}\`.`,
+                `Run: ${runUrl}`,
+              ].join('\n');
+            }
+
+            const title = `Lighthouse ${alertType} [${ff}] — ${date}`;
+
+            const perf = '${{ steps.delta.outputs.perf }}' || 'n/a';
+            const a11y = '${{ steps.delta.outputs.a11y }}' || 'n/a';
+            const bp   = '${{ steps.delta.outputs.bp }}'   || 'n/a';
+            const seo  = '${{ steps.delta.outputs.seo }}'  || 'n/a';
+            const perfPrev = '${{ steps.delta.outputs.perf_prev }}' || '-';
+            const a11yPrev = '${{ steps.delta.outputs.a11y_prev }}' || '-';
+            const bpPrev   = '${{ steps.delta.outputs.bp_prev }}'   || '-';
+            const seoPrev  = '${{ steps.delta.outputs.seo_prev }}'  || '-';
+            const perfD = '${{ steps.delta.outputs.perf_delta }}' || '-';
+            const a11yD = '${{ steps.delta.outputs.a11y_delta }}' || '-';
+            const bpD   = '${{ steps.delta.outputs.bp_delta }}'   || '-';
+            const seoD  = '${{ steps.delta.outputs.seo_delta }}'  || '-';
 
             const lines = [
-              `### Lighthouse regression — hire.vedryxtech.com (${ff})`,
+              `### Lighthouse alert — hire.vedryxtech.com (${ff})`,
+              ``,
+              intro,
               ``,
               `| Category | Previous | Current | Δ |`,
               `|---|---:|---:|---:|`,
-              `| Performance | ${{ steps.delta.outputs.perf_prev }} | **${{ steps.delta.outputs.perf }}** | ${{ steps.delta.outputs.perf_delta }} |`,
-              `| Accessibility | ${{ steps.delta.outputs.a11y_prev }} | **${{ steps.delta.outputs.a11y }}** | ${{ steps.delta.outputs.a11y_delta }} |`,
-              `| Best practices | ${{ steps.delta.outputs.bp_prev }} | **${{ steps.delta.outputs.bp }}** | ${{ steps.delta.outputs.bp_delta }} |`,
-              `| SEO | ${{ steps.delta.outputs.seo_prev }} | **${{ steps.delta.outputs.seo }}** | ${{ steps.delta.outputs.seo_delta }} |`,
+              `| Performance | ${perfPrev} | **${perf}** | ${perfD} |`,
+              `| Accessibility | ${a11yPrev} | **${a11y}** | ${a11yD} |`,
+              `| Best practices | ${bpPrev} | **${bp}** | ${bpD} |`,
+              `| SEO | ${seoPrev} | **${seo}** | ${seoD} |`,
               ``,
               `History: [lighthouse-history/${ff}/](../tree/main/lighthouse-history/${ff})`,
             ];
@@ -252,3 +337,16 @@ jobs:
                 labels: ['perf-regression'],
               });
             }
+
+      # Final step — always runs AFTER notifications so the alert destination
+      # is confirmed before the job turns red. Exits 1 on any upstream failure.
+      - name: Fail job if collection or gate or assertion failed
+        if: always()
+        run: |
+          LHCI_OUTCOME="${{ steps.lhci.outcome }}"
+          GATE_OUTCOME="${{ steps.gate.outcome }}"
+          if [ "$LHCI_OUTCOME" = "failure" ] || [ "$GATE_OUTCOME" = "failure" ]; then
+            echo "::error::Job failed — lhci: $LHCI_OUTCOME, gate: $GATE_OUTCOME. Alert issue opened above."
+            exit 1
+          fi
+          echo "All Lighthouse checks passed for ${{ matrix.form_factor }}."
