@@ -12,9 +12,9 @@ name: Lighthouse weekly cron
 # STEP ORDER — critical:
 # 1. LHCI collect/assert  (continue-on-error: true — notifier must survive failures)
 # 2. Null gate            (continue-on-error: true — writes gate_failed output)
-# 3. Archive/delta/commit (guarded: skip when gate or lhci failed)
+# 3. Archive/delta/commit (guarded: skip when gate or lhci failed; commit pushes perf-history)
 # 4. PR comment           (if: always() + delta succeeded)
-# 5. Alert issue          (if: always() — fires on ANY failure or regression)
+# 5. Alert issue          (if: always() — fires on ANY failure, regression, or PIPELINE FAILURE)
 # 6. Final fail step      (if: always() — exits 1 after notifications so job is red)
 on:
   schedule:
@@ -110,9 +110,21 @@ jobs:
         if: steps.lhci.outcome == 'success' && steps.gate.outcome == 'success'
         run: |
           set -euo pipefail
-          DEST_DIR="lighthouse-history/${{ matrix.form_factor }}"
+          FF="${{ matrix.form_factor }}"
+          DEST_DIR="lighthouse-history/${FF}"
           NEW="${{ steps.archive.outputs.report_path }}"
-          PREV=$(ls "$DEST_DIR"/*.json 2>/dev/null | grep -v "$(basename "$NEW")" | sort | tail -n1 || true)
+          # Read previous report from perf-history branch, not working tree.
+          git fetch origin perf-history 2>/dev/null || true
+          PREV=""
+          PREV_NAME="(no prior report)"
+          if git rev-parse --verify "origin/perf-history" >/dev/null 2>&1; then
+            _PREV_PATH=$(git ls-tree -r --name-only "origin/perf-history" -- "${DEST_DIR}" 2>/dev/null | grep '\.json$' | sort | tail -n1 || true)
+            if [ -n "$_PREV_PATH" ]; then
+              git show "origin/perf-history:${_PREV_PATH}" > /tmp/lh-prev-report.json
+              PREV="/tmp/lh-prev-report.json"
+              PREV_NAME=$(basename "$_PREV_PATH")
+            fi
+          fi
 
           # Fixed: use "null" string instead of 0 so callers can detect missing scores.
           read_score() {
@@ -141,11 +153,9 @@ jobs:
             DA=$(delta_int "$PA" "$NA")
             DB=$(delta_int "$PB" "$NB")
             DS=$(delta_int "$PS" "$NS")
-            PREV_NAME=$(basename "$PREV")
           else
             PP=- ; PA=- ; PB=- ; PS=-
             DP=- ; DA=- ; DB=- ; DS=-
-            PREV_NAME="(no prior report)"
           fi
           {
             echo "form_factor=${{ matrix.form_factor }}"
@@ -162,18 +172,50 @@ jobs:
           echo "has_regression=$REG" >> "$GITHUB_OUTPUT"
 
       - name: Commit history JSON
+        id: commit_history
         if: steps.lhci.outcome == 'success' && steps.gate.outcome == 'success'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add lighthouse-history
+          FF="${{ matrix.form_factor }}"
+          STAMP="${{ steps.archive.outputs.stamp }}"
+          NEW_FILE="${{ steps.archive.outputs.report_path }}"
+          DEST_DIR="lighthouse-history/${FF}"
+          # Push history to perf-history branch, never main.
+          # Use a git worktree so the source checkout stays untouched.
+          WT_DIR=$(mktemp -d)
+          cleanup() { git worktree remove --force "$WT_DIR" 2>/dev/null || true; rm -rf "$WT_DIR"; }
+          trap cleanup EXIT
+          if git ls-remote --exit-code origin perf-history >/dev/null 2>&1; then
+            git fetch origin perf-history
+            git worktree add "$WT_DIR" origin/perf-history
+          else
+            git worktree add --orphan -b perf-history "$WT_DIR"
+          fi
+          mkdir -p "${WT_DIR}/${DEST_DIR}"
+          cp "$NEW_FILE" "${WT_DIR}/${NEW_FILE}"
+          cd "$WT_DIR"
+          git add "lighthouse-history"
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
           fi
-          git commit -m "chore(lighthouse): ${{ matrix.form_factor }} report ${{ steps.archive.outputs.stamp }} [skip ci]"
-          git push origin HEAD:main
+          git commit -m "chore(lighthouse): ${FF} report ${STAMP} [skip ci]"
+          # Retry on non-fast-forward rejection (mobile + desktop matrix run concurrently).
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/perf-history"; then
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Push rejected (attempt ${attempt}/2) — fetching and rebasing on origin/perf-history..."
+              git fetch origin perf-history
+              git rebase "origin/perf-history" || { git rebase --abort; echo "Rebase failed — aborting."; exit 1; }
+            else
+              echo "Push failed after 3 attempts."
+              exit 1
+            fi
+          done
 
       # Only comment if delta was actually computed (i.e., collection + gate succeeded).
       - name: Comment delta on open PRs
@@ -213,7 +255,7 @@ jobs:
               `| SEO | ${prev.seo} | **${cur.seo}** | ${fmt(delta.seo)} |`,
               ``,
               `Vs previous: \`${{ steps.delta.outputs.prev_name }}\`.`,
-              `History: [lighthouse-history/${ff}/](../tree/main/lighthouse-history/${ff})`,
+              `History: [lighthouse-history/${ff}/](../tree/perf-history/lighthouse-history/${ff})`,
             ].join('\n');
 
             const { data: prs } = await github.rest.pulls.list({
@@ -231,14 +273,15 @@ jobs:
             }
 
       # Unified alert issue — fires on ANY of: collection failure, null scores,
-      # LHCI assertion failure, or score regression. Title distinguishes the
-      # failure mode so the human knows which response is needed:
+      # LHCI assertion failure, score regression, or pipeline step failure.
+      # Title distinguishes the failure mode so the human knows which response is needed:
+      #   "PIPELINE FAILURE"  → archive/delta/commit step failed after collection succeeded
       #   "COLLECTION FAILED" → Chrome runner issue, check Actions runner
       #   "NULL SCORES"       → partial collection, some categories missing
       #   "ASSERT FAILURE"    → score below threshold, investigate perf
       #   "regression"        → >5pt drop week-over-week
       - name: Open alert issue
-        if: always() && (steps.lhci.outcome == 'failure' || steps.gate.outcome == 'failure' || steps.delta.outputs.has_regression == 'true')
+        if: always() && (steps.lhci.outcome == 'failure' || steps.gate.outcome == 'failure' || steps.archive.outcome == 'failure' || steps.delta.outcome == 'failure' || steps.commit_history.outcome == 'failure' || steps.delta.outputs.has_regression == 'true')
         uses: actions/github-script@v8
         with:
           script: |
@@ -247,10 +290,22 @@ jobs:
             const lhciOutcome = '${{ steps.lhci.outcome }}';
             const gateOutcome = '${{ steps.gate.outcome }}';
             const failureReason = '${{ steps.gate.outputs.failure_reason }}';
+            const archiveOutcome = '${{ steps.archive.outcome }}';
+            const deltaOutcome = '${{ steps.delta.outcome }}';
+            const commitOutcome = '${{ steps.commit_history.outcome }}';
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
 
             let alertType, intro;
-            if (failureReason === 'collection_failed') {
+            if (archiveOutcome === 'failure' || deltaOutcome === 'failure' || commitOutcome === 'failure') {
+              const failedStep = archiveOutcome === 'failure' ? 'archive' : deltaOutcome === 'failure' ? 'delta' : 'commit_history';
+              alertType = 'PIPELINE FAILURE';
+              intro = [
+                `**Pipeline step failed** — the \`${failedStep}\` step failed for \`${ff}\`.`,
+                `LHCI collection succeeded; data may be valid but was not persisted to history.`,
+                `**Response:** check the Actions run for the failing step; rerun manually after fix.`,
+                `Run: ${runUrl}`,
+              ].join('\n');
+            } else if (failureReason === 'collection_failed') {
               alertType = 'COLLECTION FAILED';
               intro = [
                 `**Collection failed** — no LHR files produced for \`${ff}\`.`,
@@ -309,7 +364,7 @@ jobs:
               `| Best practices | ${bpPrev} | **${bp}** | ${bpD} |`,
               `| SEO | ${seoPrev} | **${seo}** | ${seoD} |`,
               ``,
-              `History: [lighthouse-history/${ff}/](../tree/main/lighthouse-history/${ff})`,
+              `History: [lighthouse-history/${ff}/](../tree/perf-history/lighthouse-history/${ff})`,
             ];
             const body = lines.join('\n');
 
@@ -345,8 +400,13 @@ jobs:
         run: |
           LHCI_OUTCOME="${{ steps.lhci.outcome }}"
           GATE_OUTCOME="${{ steps.gate.outcome }}"
-          if [ "$LHCI_OUTCOME" = "failure" ] || [ "$GATE_OUTCOME" = "failure" ]; then
-            echo "::error::Job failed — lhci: $LHCI_OUTCOME, gate: $GATE_OUTCOME. Alert issue opened above."
+          ARCHIVE_OUTCOME="${{ steps.archive.outcome }}"
+          DELTA_OUTCOME="${{ steps.delta.outcome }}"
+          COMMIT_OUTCOME="${{ steps.commit_history.outcome }}"
+          if [ "$LHCI_OUTCOME" = "failure" ] || [ "$GATE_OUTCOME" = "failure" ] || \
+             [ "$ARCHIVE_OUTCOME" = "failure" ] || [ "$DELTA_OUTCOME" = "failure" ] || \
+             [ "$COMMIT_OUTCOME" = "failure" ]; then
+            echo "::error::Job failed — lhci: $LHCI_OUTCOME, gate: $GATE_OUTCOME, archive: $ARCHIVE_OUTCOME, delta: $DELTA_OUTCOME, commit: $COMMIT_OUTCOME. Alert issue opened above."
             exit 1
           fi
           echo "All Lighthouse checks passed for ${{ matrix.form_factor }}."
