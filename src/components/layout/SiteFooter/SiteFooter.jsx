@@ -14,6 +14,7 @@ export function SiteFooter() {
             <div className="footer-col"><h4>Platform</h4><a href="#engine">How it works</a><a href="#stack">Technologies</a><a href="#why">Why Vedryx</a></div>
             <div className="footer-col"><h4>Company</h4><a href="#trust">Vetting</a><a href="#riskfree">Guarantee</a><a href="#submit">Contact</a></div>
             <div className="footer-col"><h4>Get started</h4><a href="#submit">Request callback</a><a href="#submit">Contact Vedryx</a></div>
+            <div className="footer-col"><h4>More from Vedryx</h4><a href="https://vedryxtech.com/" rel="noopener">Vedryx AI voice agents</a><a href="https://pulse.vedryxtech.com/" rel="noopener">Vedryx Pulse 19-day builds</a></div>
           </div>
         </div>
         <div className="footer-bottom">
