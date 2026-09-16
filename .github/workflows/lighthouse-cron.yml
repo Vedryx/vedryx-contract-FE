@@ -3,14 +3,20 @@ name: Lighthouse weekly cron
 # Runs against production every Monday 06:00 IST = 00:30 UTC.
 # Also manually triggerable for spot checks.
 # Free GitHub Actions runner only — ₹0 ongoing.
+#
+# NOTE: assertions use `error`, not `warn`. A null score will NOT trip
+# minScore (null is not a number), so a separate null-gate step is added
+# below. Together these two checks guarantee the job goes red on either
+# a low score OR a missing/null score.
 on:
   schedule:
     - cron: '30 0 * * 1' # Monday 00:30 UTC = 06:00 IST
   workflow_dispatch: {}
 
 permissions:
-  contents: write       # to commit lighthouse-history JSON back to main
-  pull-requests: write  # to comment delta on any open PR
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
   lighthouse:
@@ -37,6 +43,28 @@ jobs:
           uploadArtifacts: true
           temporaryPublicStorage: true
 
+      # Belt-and-braces null gate. LHCI's minScore assertion only fires on a
+      # numeric value — a null score passes right through. This step parses
+      # every collected LHR and exits 1 if any category score is null OR if
+      # no LHR files were produced at all (collection failure).
+      - name: Gate — fail if any score is null or collection failed
+        run: |
+          set -euo pipefail
+          LHR_COUNT=$(ls .lighthouseci/lhr-*.json 2>/dev/null | wc -l || echo 0)
+          if [ "$LHR_COUNT" -eq 0 ]; then
+            echo "::error::No LHR files produced — LHCI collection failed entirely for ${{ matrix.form_factor }}. Check Chrome availability."
+            exit 1
+          fi
+          FAIL=0
+          for f in .lighthouseci/lhr-*.json; do
+            NULL_CATS=$(jq -r '[.categories | to_entries[] | select(.value.score == null) | .key] | join(", ")' "$f")
+            if [ -n "$NULL_CATS" ]; then
+              echo "::error::Null scores in $(basename $f) [${{ matrix.form_factor }}]: $NULL_CATS — monitoring was blind to these categories."
+              FAIL=1
+            fi
+          done
+          exit $FAIL
+
       - name: Archive run JSON into lighthouse-history/
         id: archive
         run: |
@@ -61,9 +89,18 @@ jobs:
           DEST_DIR="lighthouse-history/${{ matrix.form_factor }}"
           NEW="${{ steps.archive.outputs.report_path }}"
           PREV=$(ls "$DEST_DIR"/*.json 2>/dev/null | grep -v "$(basename "$NEW")" | sort | tail -n1 || true)
+
+          # Fixed: use "null" string instead of 0 so callers can detect missing scores.
           read_score() {
-            jq -r ".categories.\"$2\".score // 0" "$1" | awk '{printf "%d\n", $1 * 100}'
+            local raw
+            raw=$(jq -r ".categories.\"$2\".score" "$1")
+            if [ "$raw" = "null" ] || [ -z "$raw" ]; then
+              echo "null"
+            else
+              awk -v v="$raw" 'BEGIN {printf "%d\n", v * 100}'
+            fi
           }
+
           NP=$(read_score "$NEW" performance)
           NA=$(read_score "$NEW" accessibility)
           NB=$(read_score "$NEW" best-practices)
@@ -73,7 +110,13 @@ jobs:
             PA=$(read_score "$PREV" accessibility)
             PB=$(read_score "$PREV" best-practices)
             PS=$(read_score "$PREV" seo)
-            DP=$((NP - PP)); DA=$((NA - PA)); DB=$((NB - PB)); DS=$((NS - PS))
+            delta_int() {
+              if [ "$1" = "null" ] || [ "$2" = "null" ]; then echo "-"; else echo $(( $2 - $1 )); fi
+            }
+            DP=$(delta_int "$PP" "$NP")
+            DA=$(delta_int "$PA" "$NA")
+            DB=$(delta_int "$PB" "$NB")
+            DS=$(delta_int "$PS" "$NS")
             PREV_NAME=$(basename "$PREV")
           else
             PP=- ; PA=- ; PB=- ; PS=-
@@ -87,6 +130,12 @@ jobs:
             echo "perf_delta=$DP"; echo "a11y_delta=$DA"; echo "bp_delta=$DB"; echo "seo_delta=$DS"
             echo "prev_name=$PREV_NAME"
           } >> "$GITHUB_OUTPUT"
+
+          # Detect regression: perf drop > 5pts week-over-week, or any score null.
+          REG=false
+          if [ "$NP" = "null" ]; then REG=true; fi
+          if [ "$DP" != "-" ] && [ "$DP" -lt -5 ] 2>/dev/null; then REG=true; fi
+          echo "has_regression=$REG" >> "$GITHUB_OUTPUT"
 
       - name: Commit history JSON
         run: |
@@ -127,7 +176,7 @@ jobs:
             const fmt = (d) => d === '-' ? '—' : (Number(d) > 0 ? `+${d}` : `${d}`);
 
             const body = [
-              `### Lighthouse weekly (${ff}) — vedryxtech.com`,
+              `### Lighthouse weekly (${ff}) — hire.vedryxtech.com`,
               ``,
               `| Category | Previous | Current | Δ |`,
               `|---|---:|---:|---:|`,
@@ -151,5 +200,55 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: pr.number,
                 body,
+              });
+            }
+
+      # Open a GH issue on regression so the alert has a destination even
+      # when no PRs are open.
+      - name: Open regression issue
+        if: steps.delta.outputs.has_regression == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const ff = '${{ steps.delta.outputs.form_factor }}';
+            const date = new Date().toISOString().slice(0, 10);
+            const title = `Lighthouse regression [${ff}] — ${date}`;
+
+            const lines = [
+              `### Lighthouse regression — hire.vedryxtech.com (${ff})`,
+              ``,
+              `| Category | Previous | Current | Δ |`,
+              `|---|---:|---:|---:|`,
+              `| Performance | ${{ steps.delta.outputs.perf_prev }} | **${{ steps.delta.outputs.perf }}** | ${{ steps.delta.outputs.perf_delta }} |`,
+              `| Accessibility | ${{ steps.delta.outputs.a11y_prev }} | **${{ steps.delta.outputs.a11y }}** | ${{ steps.delta.outputs.a11y_delta }} |`,
+              `| Best practices | ${{ steps.delta.outputs.bp_prev }} | **${{ steps.delta.outputs.bp }}** | ${{ steps.delta.outputs.bp_delta }} |`,
+              `| SEO | ${{ steps.delta.outputs.seo_prev }} | **${{ steps.delta.outputs.seo }}** | ${{ steps.delta.outputs.seo_delta }} |`,
+              ``,
+              `History: [lighthouse-history/${ff}/](../tree/main/lighthouse-history/${ff})`,
+            ];
+            const body = lines.join('\n');
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'perf-regression',
+              per_page: 20,
+            });
+            const existing = openIssues.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['perf-regression'],
               });
             }

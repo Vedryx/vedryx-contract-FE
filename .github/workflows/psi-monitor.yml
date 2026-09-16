@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 15
 
     env:
-      TARGET_URLS: https://vedryxtech.com/
+      TARGET_URLS: https://hire.vedryxtech.com/
       PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
 
     steps:
