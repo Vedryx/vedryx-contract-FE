@@ -64,7 +64,7 @@ jobs:
           set -uo pipefail
           GATE_FAILED=false
           REASON=none
-          LHR_COUNT=$(ls .lighthouseci/lhr-*.json 2>/dev/null | wc -l || echo 0)
+          LHR_COUNT=$(find .lighthouseci -maxdepth 1 -name "lhr-*.json" 2>/dev/null | wc -l)
           if [ "$LHR_COUNT" -eq 0 ]; then
             echo "::error::No LHR files produced — LHCI collection failed entirely for ${{ matrix.form_factor }}. Check Chrome availability on the runner."
             GATE_FAILED=true
