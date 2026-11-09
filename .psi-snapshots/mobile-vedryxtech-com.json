@@ -1,7 +1,7 @@
 {
   "url": "https://vedryxtech.com/",
   "strategy": "mobile",
-  "fetched_at": "2026-11-02T19:10:28.380Z",
+  "fetched_at": "2026-11-09T19:29:04.008Z",
   "lighthouse_version": "13.6.0",
   "categories": {
     "performance": 96,
@@ -23,8 +23,8 @@
       "display_value": "0 ms"
     },
     "speed-index": {
-      "score": 0.97,
-      "display_value": "2.6 s"
+      "score": 0.99,
+      "display_value": "2.1 s"
     },
     "first-contentful-paint": {
       "score": 0.95,
