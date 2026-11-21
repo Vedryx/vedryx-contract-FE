@@ -32,17 +32,30 @@ test.describe('homepage SSR output', () => {
     expect(html).toContain('<meta property="og:image"')
   })
 
-  test('renders Organization, WebSite, and Service JSON-LD blocks', async () => {
+  test('renders WebSite, Brand, and Service JSON-LD blocks cross-linked to root Organization', async () => {
     // Pull the JSON-LD payload out of the head.
     const ldMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)
     expect(ldMatch, 'JSON-LD script block missing from SSR HTML').not.toBeNull()
     const ld = JSON.parse(ldMatch![1])
     expect(ld['@context']).toBe('https://schema.org')
     expect(Array.isArray(ld['@graph'])).toBe(true)
-    const types = ld['@graph'].map((n: { '@type': string }) => n['@type'])
-    expect(types).toContain('Organization')
+    const nodes = ld['@graph'] as Array<Record<string, unknown>>
+    const types = nodes.map((n) => n['@type'] as string)
+    // Post-consolidation invariant: the root Organization is declared ONLY on
+    // vedryxtech.com/#organization. Sub-brand sites hold WebSite / Brand /
+    // Service nodes that cross-reference the root Org by @id.
     expect(types).toContain('WebSite')
+    expect(types).toContain('Brand')
     expect(types).toContain('Service')
+    expect(types).not.toContain('Organization')
+    const website = nodes.find((n) => n['@type'] === 'WebSite') as {
+      publisher?: { '@id'?: string }
+    }
+    expect(website.publisher?.['@id']).toBe('https://vedryxtech.com/#organization')
+    const service = nodes.find((n) => n['@type'] === 'Service') as {
+      provider?: { '@id'?: string }
+    }
+    expect(service.provider?.['@id']).toBe('https://vedryxtech.com/#organization')
   })
 
   test('hero is visible after hydration', async ({ page }) => {
